@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ExpressMsiBuilderProject schemaVersion="1">
+  <Product name="MyApp" manufacturer="MyCompany" version="1.0.0"
+           architecture="x64" scope="perMachine"
+           productCode="{EBD907CA-21FC-423A-99CD-C1E5ABF285E3}"
+           upgradeCode="{BE3FDC0D-1964-49D0-BC41-307106433150}" />
+  <Source directory="./multi-payload" />
+  <Installation directory="{ProgramFiles}\{Manufacturer}\{ProductName}"
+                allowDirectoryChange="true" />
+  <UI>
+    <License file="./demo-terms.txt" />
+    <BrandingText>Express MSI Builder</BrandingText>
+  </UI>
+  <Build outputDirectory="../dist/project-demo" outputFile="MyApp.msi">
+    <Cabinet storage="external" split="none" />
+  </Build>
+</ExpressMsiBuilderProject>

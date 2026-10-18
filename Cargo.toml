@@ -1,0 +1,9 @@
+[package]
+name = "emb-msi"
+version = "0.1.0"
+edition = "2024"
+description = "Express MSI Builder: native MSI prototype"
+publish = false
+
+[dependencies]
+xml-rs = "=0.8.29"

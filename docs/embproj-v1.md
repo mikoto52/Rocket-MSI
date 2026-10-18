@@ -1,0 +1,59 @@
+# .embproj v1 — 현재 구현
+
+XML 프로젝트 생성·검증·저장·MSI 빌드를 지원한다. UTF-8(선택적 BOM)을 사용하며 루트는 ExpressMsiBuilderProject, schemaVersion="1"이다. 실행 가능한 예제는 `examples/MyApp.embproj`다. 이전 전체 설계는 `docs/full-project-design.xml`로 보존했으며 현재 엔진에서는 빌드할 수 없다.
+
+```powershell
+cargo run --offline -- init MyProject.embproj
+cargo run --offline -- validate examples/MyApp.embproj
+cargo run --offline -- build examples/MyApp.embproj
+cargo run --offline -- normalize MyProject.embproj MyProject.normalized.embproj
+```
+
+init은 새 ProductCode·UpgradeCode를 파일에 저장한다. 기본 소스는 프로젝트 옆 payload 폴더다. validate는 구조와 설정만 검사하며 파일 존재 여부와 CAB 생성 등은 빌드 때 검사한다. normalize는 현재 지원 설정을 새 파일로 저장한다. 주석·원래 서식은 보존하지 않으며 상대 경로 문자열은 유지한다. 따라서 다른 폴더에 저장할 때는 경로를 수정해야 한다. 프로젝트와 빌드 출력은 기존 파일을 덮어쓰지 않는다.
+
+| 요소 | 속성 및 내용 |
+|---|---|
+| Product (필수) | name, manufacturer, version, productCode, upgradeCode, architecture=x86/x64, scope=perMachine |
+| Source (필수) | directory: 재귀 포함할 폴더 |
+| Installation (필수) | directory, allowDirectoryChange=true/false |
+| UI (선택) | License, BrandingText, FinishLaunch |
+| UI/License | file: UTF-8 TXT 또는 RTF |
+| UI/BrandingText | 한 줄 텍스트. 기본 Express MSI Builder |
+| UI/FinishLaunch | file: 소스 내부 상대 EXE 경로 |
+| FinishLaunch/Arguments | Argument 요소를 순서대로 반복. 요소 하나가 인수 하나 |
+| Build (필수) | outputDirectory, outputFile: 경로 없는 .msi 파일명 |
+| Build/Cabinet (선택) | storage=embedded/external, split=none/size, size일 때 targetSizeMiB=1..2047 |
+
+Cabinet 생략 시 내장·분할 없음이다. split=none에는 targetSizeMiB를 쓰지 않는다. 외부 CAB는 MSI 옆 Data1.cab, Data2.cab 등을 모두 배포한다. 단일 파일을 여러 CAB에 걸쳐 나누지는 않는다.
+
+소스·약관·출력 상대 경로는 **프로젝트 파일 폴더 기준**이다. FinishLaunch.file은 소스 기준이며 설치된 파일을 실행한다. 인수는 빈 문자열·양끝 공백·XML 이스케이프를 왕복 보존한다.
+
+```xml
+<FinishLaunch file="bin/MyApp.exe">
+  <Arguments>
+    <Argument>first argument</Argument>
+    <Argument>[literal]</Argument>
+    <Argument></Argument>
+  </Arguments>
+</FinishLaunch>
+```
+
+완료 화면의 실행 체크박스는 기본 해제이며 /passive, /qn, 복구·제거에서는 실행하지 않는다.
+
+Installation.directory는 `{ProgramFiles}\`로 시작하며 하위 폴더에서 `{Manufacturer}`, `{ProductName}`, `{ProductVersion}`을 치환한다. x64는 ProgramFiles64Folder, x86은 ProgramFilesFolder를 사용한다. allowDirectoryChange=false는 경로 입력을 비활성화한다. 관리자 명령줄의 INSTALLDIR 재정의를 금지하는 보안 기능은 아니다. ProgramData 등 다른 변수는 후속 단위다.
+
+GUID는 대문자·중괄호로 정규화한다. 잘못된 GUID·0 GUID·동일한 ProductCode와 UpgradeCode는 거부한다. 버전 상한은 255.255.65535이며 숫자 세 부분이 필요하다. PackageCode는 빌드마다 생성한다. 컴포넌트 GUID는 UpgradeCode·아키텍처·설치 위치 설정·파일 상대 경로를 기반으로 결정하며 동일 설정의 재빌드에서 유지된다.
+
+**자동 업그레이드는 아직 구현하지 않았다.** GUID·버전을 편집할 수 있다는 사실만으로 기존 버전의 자동 교체가 보장되지 않는다.
+
+알 수 없는 요소·속성, 중복 단일 요소, 미지원 스키마, DTD·엔티티 선언·네임스페이스·처리 명령은 거부한다. XML 크기 1 MiB, 요소 10,000개, 깊이 64로 제한한다. 레지스트리·바로가기·설치/제거 실행 목록은 아직 지원하지 않으며 오류로 안내한다. Tauri 편집 화면은 후속 작업이다.
+
+## 수동 시험
+
+1. 예제를 빌드한다. dist/project-demo 출력이 이미 있다면 outputDirectory를 다른 폴더로 바꾼다.
+2. dist/project-demo/MyApp.msi를 실행해 이름 MyApp, 약관·브랜딩을 확인한다.
+3. 기본 경로 `C:\Program Files\MyCompany\MyApp`에 파일 네 개가 하위 경로대로 설치되는지 확인한다.
+4. 같은 MSI를 다시 열어 복구·제거를 시험한다. 이 예제는 이전 고정 시험용 제품과 다른 GUID다.
+5. 배포 시 MyApp.msi와 Data1.cab을 함께 둔다.
+
+자동 테스트는 XML 왕복·잘못된 입력·상대 경로·x86/x64 실제 MSI 테이블과 설치 세션 열기를 검사한다. 실제 설치·제거는 자동 실행하지 않는다.

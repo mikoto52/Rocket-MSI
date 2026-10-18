@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ExpressMsiBuilderProject schemaVersion="1">
+  <Product name="MyApp" manufacturer="MyCompany" version="1.0.0"
+           architecture="x64" scope="perMachine"
+           upgradeCode="{11111111-2222-4333-8444-555555555555}"
+           productCode="{66666666-7777-4888-8999-AAAAAAAAAAAA}" />
+  <Source directory="./payload" mainExecutable="MyApp.exe">
+    <Excludes />
+  </Source>
+  <Installation directory="{ProgramFiles}\{Manufacturer}\{ProductName}"
+                allowDirectoryChange="true" />
+  <Shortcuts desktop="false" startMenu="true" />
+  <Variables>
+    <Variable name="DataDir">{ProgramData}\{Manufacturer}\{ProductName}</Variable>
+  </Variables>
+  <Registry>
+    <Entry id="install-path" root="HKLM"
+           key="Software\{Manufacturer}\{ProductName}" name="InstallPath"
+           type="REG_SZ" view="registry64" uninstall="remove">
+      <Data>{InstallDir}</Data>
+    </Entry>
+  </Registry>
+  <Actions>
+    <Install>
+      <Action id="configure-app" name="앱 초기 설정" enabled="true"
+              hideWindow="true" failurePolicy="stop" runOnUpgrade="false">
+        <Executable kind="installedFile" path="MyApp.exe" />
+        <Arguments>
+          <Argument>--configure</Argument>
+          <Argument>--data</Argument>
+          <Argument>{DataDir}</Argument>
+        </Arguments>
+        <WorkingDirectory>{InstallDir}</WorkingDirectory>
+      </Action>
+    </Install>
+    <Uninstall>
+      <Action id="cleanup-app" name="앱 설정 정리" enabled="true"
+              hideWindow="true" failurePolicy="stop" runOnUpgrade="false">
+        <Executable kind="installedFile" path="MyApp.exe" />
+        <Arguments>
+          <Argument>--cleanup</Argument>
+        </Arguments>
+        <WorkingDirectory>{InstallDir}</WorkingDirectory>
+      </Action>
+    </Uninstall>
+  </Actions>
+  <Build outputDirectory="./dist" />
+</ExpressMsiBuilderProject>

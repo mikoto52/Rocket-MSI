@@ -1,5 +1,7 @@
 # 변수 및 레지스트리 명세
 
+현재 구현 범위는 [레지스트리 첫 구현 및 시험](registry-test.md)을 기준으로 한다. REG_SZ·REG_DWORD·REG_BINARY·REG_MULTI_SZ 및 기본 경로 변수를 지원한다. 아래 내용에는 설치일·드라이브·사용자 변수·keep 등 후속 설계가 포함된다. 현재 경로 변수는 단독 사용 시 MSI의 끝 역슬래시를 유지한다.
+
 ## 1. 공통 문법
 
 변수 참조는 `{Name}`이며 이름은 대소문자를 구분한다. 사용자 변수 이름은 `[A-Za-z][A-Za-z0-9_]*`로 제한하고 기본 변수 이름을 재정의할 수 없다. 중괄호 자체는 `{{`, `}}`로 표현한다. 파서는 이를 리터럴로 보존하며 치환 후 결과를 다시 변수 구문으로 해석하지 않는다.
@@ -60,8 +62,8 @@
 | root | HKLM 또는 HKCU |
 | key | 루트 이하의 키 경로 템플릿; 빈 경로 금지 |
 | name | 값 이름 템플릿; 빈 문자열은 기본값 |
-| type | REG_SZ, REG_EXPAND_SZ, REG_DWORD, REG_MULTI_SZ |
-| value | 문자열 / DWORD 정수 / 문자열 배열 |
+| type | REG_SZ, REG_DWORD, REG_BINARY, REG_MULTI_SZ; REG_EXPAND_SZ는 후속 후보 |
+| value | 문자열 / DWORD 정수 / HEX 바이트 / 문자열 배열 |
 | view | registry32 또는 registry64; x86 패키지의 registry64는 차단 |
 | uninstall | remove(기본) 또는 keep |
 

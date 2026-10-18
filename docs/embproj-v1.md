@@ -15,7 +15,11 @@ init은 새 ProductCode·UpgradeCode를 파일에 저장한다. 기본 소스는
 |---|---|
 | Product (필수) | name, manufacturer, version, productCode, upgradeCode, architecture=x86/x64, scope=perMachine |
 | Source (필수) | directory: 재귀 포함할 폴더 |
-| Installation (필수) | directory, allowDirectoryChange=true/false |
+| Installation (필수) | directory, allowDirectoryChange=true/false, existingFiles=default/skip/overwrite (선택) |
+| Registry (선택) | Entry 반복: REG_SZ, REG_DWORD, REG_BINARY, REG_MULTI_SZ. [명세 및 시험](registry-test.md) |
+| Shortcuts (선택) | Shortcut 반복: 시작 메뉴/바탕화면, 대상 파일·인수·작업 폴더. [명세 및 시험](shortcut-test.md) |
+| Actions (선택) | Install/Uninstall의 Action 목록: 인수·창 숨김·오류 정책. [현재 명세 및 시험](actions-test.md) |
+| Upgrade (선택) | enabled=true/false. [현재 제한과 시험](upgrade-test.md). 새 프로젝트는 true, 요소 생략 시 false |
 | UI (선택) | License, BrandingText, FinishLaunch |
 | UI/License | file: UTF-8 TXT 또는 RTF |
 | UI/BrandingText | 한 줄 텍스트. 기본 Express MSI Builder |
@@ -44,9 +48,9 @@ Installation.directory는 `{ProgramFiles}\`로 시작하며 하위 폴더에서 
 
 GUID는 대문자·중괄호로 정규화한다. 잘못된 GUID·0 GUID·동일한 ProductCode와 UpgradeCode는 거부한다. 버전 상한은 255.255.65535이며 숫자 세 부분이 필요하다. PackageCode는 빌드마다 생성한다. 컴포넌트 GUID는 UpgradeCode·아키텍처·설치 위치 설정·파일 상대 경로를 기반으로 결정하며 동일 설정의 재빌드에서 유지된다.
 
-**자동 업그레이드는 아직 구현하지 않았다.** GUID·버전을 편집할 수 있다는 사실만으로 기존 버전의 자동 교체가 보장되지 않는다.
+**자동 업그레이드는 Upgrade enabled=true로 활성화한다.** UpgradeCode 유지·버전 증가·새 ProductCode가 필요하며 동일 아키텍처·설치 위치 구성으로 제한한다. 예전 패키지의 내부 업그레이드 정보가 없는 경우와 위치 변경은 차단한다. [업그레이드 명세](upgrade-test.md)를 따른다.
 
-알 수 없는 요소·속성, 중복 단일 요소, 미지원 스키마, DTD·엔티티 선언·네임스페이스·처리 명령은 거부한다. XML 크기 1 MiB, 요소 10,000개, 깊이 64로 제한한다. 레지스트리·바로가기·설치/제거 실행 목록은 아직 지원하지 않으며 오류로 안내한다. Tauri 편집 화면은 후속 작업이다.
+알 수 없는 요소·속성, 중복 단일 요소, 미지원 스키마, DTD·엔티티 선언·네임스페이스·처리 명령은 거부한다. XML 크기 1 MiB, 요소 10,000개, 깊이 64로 제한한다. [Tauri 편집기](builder-gui.md)에서도 동일한 검증을 사용한다.
 
 ## 수동 시험
 
@@ -57,3 +61,5 @@ GUID는 대문자·중괄호로 정규화한다. 잘못된 GUID·0 GUID·동일�
 5. 배포 시 MyApp.msi와 Data1.cab을 함께 둔다.
 
 자동 테스트는 XML 왕복·잘못된 입력·상대 경로·x86/x64 실제 MSI 테이블과 설치 세션 열기를 검사한다. 실제 설치·제거는 자동 실행하지 않는다.
+
+기존 파일 처리 정책은 [명세 및 시험 키트](file-policy-test.md)를 참고한다. 생략 시 MSI 기본 규칙을 적용하며, 프로젝트 기반 마법사 복구에도 정책이 적용된다.

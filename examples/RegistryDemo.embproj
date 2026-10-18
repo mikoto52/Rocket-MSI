@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ExpressMsiBuilderProject schemaVersion="1">
+  <Product name="InstallEmbly Registry Demo" manufacturer="InstallEmbly" version="1.0.0"
+    productCode="{83AF3F8D-F537-4621-990B-498BBEF8FEF0}"
+    upgradeCode="{AC124B28-7836-41F3-8FB1-65B9BF4D898F}" architecture="x64" scope="perMachine" />
+  <Source directory="./payload" />
+  <Installation directory="{ProgramFiles}\InstallEmbly\Registry Demo" allowDirectoryChange="true" />
+  <Registry>
+    <Entry id="install_path" root="HKLM" key="Software\{Manufacturer}\RegistryDemo" name="InstallPath" type="REG_SZ"><Data>{InstallDir}</Data></Entry>
+    <Entry id="program_files" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="ProgramFiles" type="REG_SZ"><Data>{ProgramFiles}</Data></Entry>
+    <Entry id="program_data" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="ProgramData" type="REG_SZ"><Data>{ProgramData}</Data></Entry>
+    <Entry id="windows_dir" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="WindowsDir" type="REG_SZ"><Data>{WindowsDir}</Data></Entry>
+    <Entry id="combined" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="DataPath" type="REG_SZ"><Data>{ProgramData}\InstallEmbly\RegistryDemo</Data></Entry>
+    <Entry id="literal" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="Literal" type="REG_SZ"><Data>#x00 [literal] [~] {{braces}} 한글</Data></Entry>
+    <Entry id="empty" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="Empty" type="REG_SZ"><Data></Data></Entry>
+    <Entry id="enabled" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="Enabled" type="REG_DWORD"><Data>1</Data></Entry>
+    <Entry id="max_dword" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="MaxDword" type="REG_DWORD"><Data>0xFFFFFFFF</Data></Entry>
+    <Entry id="blob" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="Blob" type="REG_BINARY"><Data>00 01 7F 80 FE FF</Data></Entry>
+    <Entry id="paths" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="Paths" type="REG_MULTI_SZ"><Data><String>{InstallDir}\hello.txt</String><String>  공백 유지  </String><String>[literal]</String></Data></Entry>
+    <Entry id="single" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="Single" type="REG_MULTI_SZ"><Data><String>#one</String></Data></Entry>
+    <Entry id="default_value" root="HKLM" key="Software\InstallEmbly\RegistryDemo\Defaults" name="" type="REG_SZ"><Data>기본값</Data></Entry>
+    <Entry id="view32" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="View32" type="REG_SZ" view="registry32"><Data>32-bit view</Data></Entry>
+  </Registry>
+  <UI><BrandingText>Express MSI Builder</BrandingText></UI>
+  <Build outputDirectory="../dist/registry-demo" outputFile="Setup.msi"><Cabinet storage="embedded" split="none" /></Build>
+</ExpressMsiBuilderProject>

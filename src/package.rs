@@ -127,6 +127,8 @@ pub fn build_configured(spec: &BuildSpec<'_>) -> Result<()> {
     if spec.product.is_some() {
         crate::payload::namespace(&mut files, product)?;
     }
+    crate::shortcut::validate_payload(&product.shortcuts, &files)?;
+    crate::actions::validate_payload(product, &files)?;
     if let Some(launch) = launch {
         launch.resolve(&files)?;
         launch.target()?;
@@ -172,11 +174,25 @@ pub fn build_configured(spec: &BuildSpec<'_>) -> Result<()> {
         ("INSTALLLEVEL", "1"),
         ("DefaultUIFont", "Normal"),
         ("ARPNOMODIFY", "1"),
-        ("SecureCustomProperties", "INSTALLDIR;ACCEPTLICENSE"),
+        (
+            "SecureCustomProperties",
+            if product.upgrade {
+                "INSTALLDIR;ACCEPTLICENSE;EMB_OLD_PRODUCTS;EMB_NEWER_PRODUCTS;EMB_SAME_PRODUCTS"
+            } else {
+                "INSTALLDIR;ACCEPTLICENSE"
+            },
+        ),
         ("BrandingText", branding),
         ("MaintenanceChoice", "Repair"),
     ] {
         db.insert("Property", &["Property", "Value"], &[T(key), T(value)])?;
+    }
+    if spec.product.is_some() {
+        db.insert(
+            "Property",
+            &["Property", "Value"],
+            &[T("REINSTALLMODE"), T(product.existing_files.mode())],
+        )?;
     }
     let program_files = if product.architecture == "x64" {
         "ProgramFiles64Folder"
@@ -231,6 +247,8 @@ pub fn build_configured(spec: &BuildSpec<'_>) -> Result<()> {
         ],
     )?;
     author_payload(&db, &files, &sizes, product.architecture == "x64")?;
+    crate::registry::author(&db, product)?;
+    crate::shortcut::author(&db, product, &files)?;
     for (index, cab) in cabinets.iter().enumerate() {
         let reference = if storage == CabStorage::Embedded {
             format!("#{}", cab.name)
@@ -261,13 +279,23 @@ pub fn build_configured(spec: &BuildSpec<'_>) -> Result<()> {
         db.binary(name, &path)?;
     }
     sequences(&db)?;
-    ui(&db, license.as_deref())?;
+    ui(
+        &db,
+        license.as_deref(),
+        if spec.product.is_some() {
+            product.existing_files.mode()
+        } else {
+            "amus"
+        },
+    )?;
     if !product.allow_directory_change {
         db.execute("UPDATE `Control` SET `Attributes` = 1 WHERE `Dialog_` = 'Path' AND `Control` = 'Folder'")?;
     }
     if let Some(launch) = launch {
         author_finish_launch(&db, &files, launch)?;
     }
+    crate::actions::author(&db, product, &files, &work.0)?;
+    crate::upgrade::author(&db, product)?;
     order_controls(&db)?;
     if license.is_some() {
         db.insert("LaunchCondition", &["Condition","Description"],
@@ -376,6 +404,7 @@ fn author_payload(
                 T(&file.id),
             ],
         )?;
+        let version = msi::file_version(&file.source)?;
         db.insert(
             "File",
             &[
@@ -383,6 +412,8 @@ fn author_payload(
                 "Component_",
                 "FileName",
                 "FileSize",
+                "Version",
+                "Language",
                 "Attributes",
                 "Sequence",
             ],
@@ -391,6 +422,12 @@ fn author_payload(
                 T(&file.component),
                 T(&name),
                 I(sizes[index]),
+                version.as_ref().map(|(v, _)| T(v)).unwrap_or(N),
+                version
+                    .as_ref()
+                    .filter(|(_, l)| !l.is_empty())
+                    .map(|(_, l)| T(l))
+                    .unwrap_or(N),
                 I(512),
                 I(index as i32 + 1),
             ],
@@ -435,7 +472,10 @@ fn publish_set(staged: &Path, target: &Path, storage: CabStorage, names: &[Strin
 
 fn schema(db: &Database) -> Result<()> {
     for sql in [
-        "CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)",
+        "CREATE TABLE `Shortcut` (`Shortcut` CHAR(72) NOT NULL, `Directory_` CHAR(72) NOT NULL, `Name` CHAR(255) NOT NULL, `Component_` CHAR(72) NOT NULL, `Target` CHAR(255), `Arguments` CHAR(255), `Description` CHAR(255), `Hotkey` SHORT, `Icon_` CHAR(72), `IconIndex` SHORT, `ShowCmd` SHORT, `WkDir` CHAR(72) PRIMARY KEY `Shortcut`)",
+        "CREATE TABLE `RemoveFile` (`FileKey` CHAR(72) NOT NULL, `Component_` CHAR(72) NOT NULL, `FileName` CHAR(255), `DirProperty` CHAR(72) NOT NULL, `InstallMode` SHORT NOT NULL PRIMARY KEY `FileKey`)",
+        "CREATE TABLE `Registry` (`Registry` CHAR(72) NOT NULL, `Root` SHORT NOT NULL, `Key` CHAR(255) NOT NULL, `Name` CHAR(255), `Value` CHAR(0), `Component_` CHAR(72) NOT NULL PRIMARY KEY `Registry`)",
+        "CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(0) PRIMARY KEY `Action`)",
         "CREATE TABLE `RadioButton` (`Property` CHAR(72) NOT NULL, `Order` SHORT NOT NULL, `Value` CHAR(64) NOT NULL, `X` SHORT NOT NULL, `Y` SHORT NOT NULL, `Width` SHORT NOT NULL, `Height` SHORT NOT NULL, `Text` CHAR(64), `Help` CHAR(50) PRIMARY KEY `Property`, `Order`)",
         "CREATE TABLE `CheckBox` (`Property` CHAR(72) NOT NULL, `Value` CHAR(64) PRIMARY KEY `Property`)",
         "CREATE TABLE `ControlCondition` (`Dialog_` CHAR(72) NOT NULL, `Control_` CHAR(50) NOT NULL, `Action` CHAR(50) NOT NULL, `Condition` CHAR(255) NOT NULL PRIMARY KEY `Dialog_`, `Control_`, `Action`, `Condition`)",
@@ -470,8 +510,12 @@ fn sequences(db: &Database) -> Result<()> {
         ("InstallInitialize", 1500),
         ("ProcessComponents", 1600),
         ("UnpublishFeatures", 1800),
+        ("RemoveRegistryValues", 2600),
+        ("RemoveShortcuts", 3200),
         ("RemoveFiles", 3500),
         ("InstallFiles", 4000),
+        ("CreateShortcuts", 4500),
+        ("WriteRegistryValues", 5000),
         ("RegisterUser", 6000),
         ("RegisterProduct", 6100),
         ("PublishFeatures", 6300),
@@ -690,7 +734,7 @@ fn author_finish_launch(
         &[T("LaunchAfterInstall"), I(210), T(&file.id), T(&target)],
     )?;
     let allowed = format!(
-        "NOT Installed AND NOT REMOVE AND NOT REINSTALL AND NOT UPGRADINGPRODUCTCODE AND UILevel = 5 AND ${} = 3",
+        "NOT Installed AND NOT REMOVE AND NOT REINSTALL AND NOT UPGRADINGPRODUCTCODE AND NOT EMB_OLD_PRODUCTS AND UILevel = 5 AND ${} = 3",
         file.component
     );
     control(
@@ -768,6 +812,9 @@ fn author_finish_launch(
 fn order_controls(db: &Database) -> Result<()> {
     for dialog in db.query("SELECT `Dialog`,`Control_First` FROM `Dialog`", 2)? {
         let name = &dialog[0];
+        if name == "ActionError" {
+            continue;
+        } // MSI error buttons must not have tab chains.
         let rows = db.query(
             &format!("SELECT `Control`,`Control_Next` FROM `Control` WHERE `Dialog_` = '{name}'"),
             2,
@@ -844,7 +891,7 @@ fn button(db: &Database, dlg: &str, id: &str, x: i32, text: &str, next: &str) ->
         Some(next),
     )
 }
-fn ui(db: &Database, license: Option<&str>) -> Result<()> {
+fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
     for (name, size, bits) in [("Normal", 9, 0), ("Heading", 12, 1), ("Branding", 8, 0)] {
         db.insert(
             "TextStyle",
@@ -1083,7 +1130,7 @@ fn ui(db: &Database, license: Option<&str>) -> Result<()> {
             "MaintenanceChoice = \"Repair\"",
             vec![
                 ("[REMOVE]", "{}"),
-                ("ReinstallMode", "amus"),
+                ("ReinstallMode", repair_mode),
                 ("Reinstall", "ALL"),
             ],
         ),
@@ -1276,7 +1323,13 @@ pub fn verify(path: &Path) -> Result<()> {
         return Err("CAB media sequence does not cover files".into());
     }
     let dialog_count = db.query("SELECT `Dialog` FROM `Dialog`", 1)?.len();
-    if !matches!(dialog_count, 8 | 9) {
+    let error_dialog_count = db
+        .query(
+            "SELECT `Dialog` FROM `Dialog` WHERE `Dialog` = 'ActionError'",
+            1,
+        )?
+        .len();
+    if !matches!(dialog_count - error_dialog_count, 8 | 9) {
         return Err("wizard dialogs missing".into());
     }
     let images = db.query("SELECT `Name` FROM `Binary`", 1)?;

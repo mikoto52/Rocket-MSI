@@ -6,11 +6,11 @@
 
 프로그램 이름은 **Express MSI Builder**이며 프로젝트 파일은 XML 기반 **`.embproj`** 형식이다. [프로젝트 예제](examples/MyApp.embproj)는 현재 엔진으로 빌드할 수 있다. [형식 및 시험 안내](docs/embproj-v1.md)를 참고한다.
 
-현재 단계는 **MSI 생성기 구현 및 검증**이다. Rust CLI가 파일·폴더 또는 `.embproj`를 입력받아 하위 경로와 한글 설치 마법사를 포함하는 시험 MSI를 생성한다. Tauri 편집 화면은 아직 구현하지 않았다.
+현재 단계는 **MSI 엔진 및 Tauri 빌더 구현·검증**이다. Rust CLI와 Tauri 편집기가 `.embproj`에서 한글 설치 마법사를 포함하는 MSI를 생성한다. [빌더 사용 안내](docs/builder-gui.md)와 [업그레이드 시험](docs/upgrade-test.md)을 참고한다.
 
 ## 첫 구현 실행
 
-Windows x64, Rust MSVC 도구 체인 및 Visual C++ 빌드 도구가 필요하다. CAB 생성에는 해당 Windows의 `makecab.exe`를 사용한다. XML 파서로 xml-rs 0.8.29를 사용하며 WiX 의존성은 없다. 처음에는 `cargo fetch --locked`로 의존성을 준비해야 한다.
+Windows x64, Rust MSVC 도구 체인 및 x86/x64 Visual C++ 빌드 도구가 필요하다. 실행 도우미 DLL을 위해 `rustup target add i686-pc-windows-msvc x86_64-pc-windows-msvc`로 두 타깃을 준비한다. CAB 생성에는 해당 Windows의 `makecab.exe`를 사용한다. XML 파서로 xml-rs 0.8.29를 사용하며 WiX 의존성은 없다. 처음에는 `cargo fetch --locked`로 의존성을 준비해야 한다.
 
 프로젝트 기반 빌드:
 
@@ -20,7 +20,15 @@ cargo run --offline -- validate examples/MyApp.embproj
 cargo run --offline -- build examples/MyApp.embproj
 ```
 
-프로젝트에서 제품 정보·GUID·아키텍처·설치 경로·약관·브랜딩·CAB·완료 후 실행을 설정한다. 소스·약관·출력 상대 경로는 프로젝트 폴더 기준이다. 자동 업그레이드·레지스트리·바로가기·설치/제거 실행 목록은 후속 구현이다.
+프로젝트에서 제품 정보·GUID·아키텍처·설치 경로·약관·브랜딩·CAB·완료 후 실행·레지스트리·바로가기·설치/제거 실행 목록을 설정한다. 소스·약관·출력 상대 경로는 프로젝트 폴더 기준이다. `<Upgrade enabled="true" />`로 동일 계열의 버전 업그레이드와 버전 충돌 차단을 활성화한다. 실제 업그레이드 시험은 별도 절차를 따른다.
+
+설치/제거 실행 목록은 순서·인수·창 숨김·작업 폴더·시간 제한과 오류 시 무시/알림 후 계속/중단을 지원한다. [설정과 시험 키트](docs/actions-test.md)를 참고한다.
+
+시작 메뉴·바탕화면 바로가기는 설치된 파일을 대상으로 인수·작업 폴더를 지정할 수 있다. [프로젝트 예제](examples/ShortcutDemo.embproj)와 [시험 안내](docs/shortcut-test.md)를 참고한다.
+
+레지스트리는 `REG_SZ`, `REG_DWORD`, `REG_BINARY`, `REG_MULTI_SZ`와 기본 경로 변수 치환을 지원한다. [프로젝트 예제](examples/RegistryDemo.embproj) 및 [설치·복구·제거 시험](docs/registry-test.md)을 참고한다.
+
+`Installation existingFiles="default|skip|overwrite"`로 기존 파일의 기본 규칙·건너뛰기·덮어쓰기를 선택한다. 설치와 마법사 복구에 적용하며 파일별 예외 및 GUI는 후속 구현이다. [정책 및 시험 키트](docs/file-policy-test.md)를 참고한다.
 
 ```powershell
 cargo test --offline

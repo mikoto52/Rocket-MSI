@@ -1,19 +1,5 @@
 #[cfg(windows)]
-mod cabinet;
-#[cfg(windows)]
-mod config;
-#[cfg(windows)]
-mod finish;
-#[cfg(windows)]
-mod license;
-#[cfg(windows)]
-mod msi;
-#[cfg(windows)]
-mod package;
-#[cfg(windows)]
-mod payload;
-#[cfg(windows)]
-mod project;
+use emb_msi::{finish, package, project};
 
 #[cfg(windows)]
 fn main() {

@@ -1,4 +1,35 @@
 use crate::msi::Result;
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ExistingFiles {
+    #[default]
+    Default,
+    Skip,
+    Overwrite,
+}
+impl ExistingFiles {
+    pub fn parse(value: &str) -> Result<Self> {
+        match value {
+            "default" => Ok(Self::Default),
+            "skip" => Ok(Self::Skip),
+            "overwrite" => Ok(Self::Overwrite),
+            _ => Err("Installation.existingFiles must be default, skip, or overwrite".into()),
+        }
+    }
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Skip => "skip",
+            Self::Overwrite => "overwrite",
+        }
+    }
+    pub fn mode(self) -> &'static str {
+        match self {
+            Self::Default => "omus",
+            Self::Skip => "pmus",
+            Self::Overwrite => "amus",
+        }
+    }
+}
 #[derive(Clone, Debug, PartialEq)]
 pub struct Product {
     pub name: String,
@@ -9,6 +40,11 @@ pub struct Product {
     pub architecture: String,
     pub installation: String,
     pub allow_directory_change: bool,
+    pub existing_files: ExistingFiles,
+    pub registry: Vec<crate::registry::Entry>,
+    pub shortcuts: Vec<crate::shortcut::Entry>,
+    pub actions: crate::actions::Actions,
+    pub upgrade: bool,
 }
 impl Default for Product {
     fn default() -> Self {
@@ -21,6 +57,11 @@ impl Default for Product {
             architecture: "x64".into(),
             installation: "{ProgramFiles}\\Express MSI Builder Demo".into(),
             allow_directory_change: true,
+            existing_files: ExistingFiles::Default,
+            registry: Vec::new(),
+            shortcuts: Vec::new(),
+            actions: crate::actions::Actions::default(),
+            upgrade: false,
         }
     }
 }
@@ -73,6 +114,9 @@ impl Product {
             return Err("architecture must be x86 or x64".into());
         }
         self.install_parts()?;
+        crate::registry::validate(&self.registry, self)?;
+        crate::shortcut::validate(&self.shortcuts, self)?;
+        self.actions.validate(self)?;
         Ok(())
     }
     pub fn install_parts(&self) -> Result<Vec<String>> {

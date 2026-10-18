@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ExpressMsiBuilderProject schemaVersion="1">
+  <Product name="InstallEmbly Shortcut Demo" manufacturer="InstallEmbly" version="1.0.0"
+    productCode="{44A3147C-5342-4E5F-B979-A946974BC890}" upgradeCode="{9C4F189D-C916-48DF-99A0-115DAA7FC8CA}"
+    architecture="x64" scope="perMachine" />
+  <Source directory="../dist/shortcut-input" />
+  <Installation directory="{ProgramFiles}\InstallEmbly\Shortcut Demo" allowDirectoryChange="true" />
+  <Shortcuts>
+    <Shortcut id="menu" location="startMenu" name="InstallEmbly 바로가기 시험" target="bin/ShortcutProbe.exe" workingDirectory="data" description="시작 메뉴 바로가기 시험">
+      <Arguments><Argument>start menu</Argument><Argument>[literal]</Argument><Argument></Argument></Arguments>
+    </Shortcut>
+    <Shortcut id="desktop" location="desktop" name="InstallEmbly 바로가기 시험" target="bin/ShortcutProbe.exe" workingDirectory="." description="바탕화면 바로가기 시험">
+      <Arguments><Argument>desktop</Argument><Argument>인수 하나</Argument><Argument>a&quot;b</Argument></Arguments>
+    </Shortcut>
+  </Shortcuts>
+  <UI><BrandingText>Express MSI Builder</BrandingText></UI>
+  <Build outputDirectory="../dist/shortcut-demo" outputFile="Setup.msi"><Cabinet storage="embedded" split="none" /></Build>
+</ExpressMsiBuilderProject>

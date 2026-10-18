@@ -26,7 +26,7 @@ pub fn identifier(prefix: &str, path: &Path) -> Result<String> {
         hash.iter().map(|b| format!("{b:02X}")).collect::<String>()
     ))
 }
-fn component_guid(path: &Path) -> Result<String> {
+pub(crate) fn component_guid(path: &Path) -> Result<String> {
     let mut b = msi::sha256(&format!(
         "emb-component-v1|{{9DB58DC8-21CE-45E7-9311-8932DC040002}}|x64|{}",
         key(path)?

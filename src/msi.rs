@@ -4,8 +4,17 @@ use std::{ffi::c_void, path::Path, ptr};
 type Handle = u32;
 #[link(name = "msi")]
 unsafe extern "system" {
+    fn MsiGetFileVersionW(
+        path: *const u16,
+        version: *mut u16,
+        version_len: *mut u32,
+        language: *mut u16,
+        language_len: *mut u32,
+    ) -> u32;
     fn MsiVerifyPackageW(path: *const u16) -> u32;
     fn MsiOpenPackageExW(path: *const u16, options: u32, package: *mut Handle) -> u32;
+    #[cfg(test)]
+    fn MsiDoActionW(package: Handle, action: *const u16) -> u32;
     fn MsiOpenDatabaseW(path: *const u16, mode: *const u16, db: *mut Handle) -> u32;
     fn MsiCloseHandle(handle: Handle) -> u32;
     fn MsiDatabaseOpenViewW(db: Handle, sql: *const u16, view: *mut Handle) -> u32;
@@ -48,6 +57,33 @@ unsafe extern "system" {
 }
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+pub fn file_version(path: &Path) -> Result<Option<(String, String)>> {
+    let mut version = vec![0u16; 65536];
+    let mut language = vec![0u16; 65536];
+    let mut v = version.len() as u32;
+    let mut l = language.len() as u32;
+    let path = wide(path.to_str().ok_or("invalid Unicode file path")?);
+    let code = unsafe {
+        MsiGetFileVersionW(
+            path.as_ptr(),
+            version.as_mut_ptr(),
+            &mut v,
+            language.as_mut_ptr(),
+            &mut l,
+        )
+    };
+    if code == 1006 {
+        return Ok(None);
+    } // ERROR_FILE_INVALID: no version resource.
+    check(code, "read file version")?;
+    if v > 72 || l > 20 {
+        return Err("file version/language exceeds MSI column width".into());
+    }
+    Ok(Some((
+        String::from_utf16(&version[..v as usize])?,
+        String::from_utf16(&language[..l as usize])?,
+    )))
+}
 #[link(name = "bcrypt")]
 unsafe extern "system" {
     fn BCryptOpenAlgorithmProvider(
@@ -103,6 +139,13 @@ pub fn sha256(text: &str) -> Result<[u8; 32]> {
 }
 /// Validates package recognition without starting an installation session.
 pub fn verify_package(path: &Path) -> Result<()> {
+    verify_package_inner(path, false)
+}
+#[cfg(test)]
+pub(crate) fn verify_app_search(path: &Path) -> Result<()> {
+    verify_package_inner(path, true)
+}
+fn verify_package_inner(path: &Path, search: bool) -> Result<()> {
     // Windows Installer sessions for the same product cannot be opened
     // concurrently, even when both handles ignore the installed state.
     static SESSION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -146,6 +189,16 @@ pub fn verify_package(path: &Path) -> Result<()> {
         "MsiOpenPackageExW",
     )?;
     let _package = Owned(handle);
+    #[cfg(test)]
+    if search {
+        // Only read registry/search properties; never run the installation sequence.
+        check(
+            unsafe { MsiDoActionW(handle, wide("AppSearch").as_ptr()) },
+            "AppSearch",
+        )?;
+    }
+    #[cfg(not(test))]
+    let _ = search;
     Ok(())
 }
 fn wide(s: &str) -> Vec<u16> {

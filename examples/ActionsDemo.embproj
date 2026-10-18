@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ExpressMsiBuilderProject schemaVersion="1">
+  <Product name="InstallEmbly Actions Demo" manufacturer="InstallEmbly" version="1.0.0"
+    productCode="{6A426F7E-A21C-4C96-BC65-F216B9CA82AD}" upgradeCode="{BB54A580-0322-4241-ABFC-49810BDFED79}" architecture="x64" scope="perMachine" />
+  <Source directory="../dist/actions-input" />
+  <Installation directory="{ProgramFiles}\InstallEmbly\Actions Demo" allowDirectoryChange="true" />
+  <Actions>
+    <Install>
+      <Action id="first" name="첫 설치 실행" hideWindow="true">
+        <Executable kind="installedFile" path="ActionProbe.exe" />
+        <Arguments><Argument>{ProgramData}\InstallEmbly\ActionsDemo\main.log</Argument><Argument>install-first</Argument><Argument>0</Argument><Argument>first argument</Argument><Argument>[literal]</Argument><Argument></Argument><Argument>a&quot;b</Argument></Arguments>
+        <WorkingDirectory>{InstallDir}</WorkingDirectory>
+      </Action>
+      <Action id="missing_ignore" name="없는 대상 무시" failurePolicy="ignore" hideWindow="true"><Executable kind="targetPath" path="{InstallDir}\Missing.exe" /></Action>
+      <Action id="exit_ignore" name="비정상 종료 무시" failurePolicy="ignore" hideWindow="true">
+        <Executable kind="installedFile" path="ActionProbe.exe" />
+        <Arguments><Argument>{ProgramData}\InstallEmbly\ActionsDemo\main.log</Argument><Argument>install-exit17</Argument><Argument>17</Argument></Arguments>
+      </Action>
+      <Action id="missing_notify" name="없는 대상 알림" failurePolicy="notify" hideWindow="true"><Executable kind="targetPath" path="{InstallDir}\Missing.exe" /></Action>
+      <Action id="disabled" enabled="false"><Executable kind="targetPath" path="{InstallDir}\Disabled.exe" /></Action>
+      <Action id="last" name="계속 실행 확인" hideWindow="true">
+        <Executable kind="installedFile" path="ActionProbe.exe" />
+        <Arguments><Argument>{ProgramData}\InstallEmbly\ActionsDemo\main.log</Argument><Argument>install-last</Argument><Argument>0</Argument></Arguments>
+      </Action>
+    </Install>
+    <Uninstall>
+      <Action id="first" name="제거 전 실행" hideWindow="true"><Executable kind="installedFile" path="ActionProbe.exe" /><Arguments><Argument>{ProgramData}\InstallEmbly\ActionsDemo\main.log</Argument><Argument>uninstall-first</Argument><Argument>0</Argument></Arguments></Action>
+      <Action id="missing_ignore" name="없는 대상 무시" failurePolicy="ignore" hideWindow="true"><Executable kind="targetPath" path="{InstallDir}\Missing.exe" /></Action>
+      <Action id="last" name="제거 계속 실행 확인" hideWindow="true"><Executable kind="installedFile" path="ActionProbe.exe" /><Arguments><Argument>{ProgramData}\InstallEmbly\ActionsDemo\main.log</Argument><Argument>uninstall-last</Argument><Argument>0</Argument></Arguments></Action>
+    </Uninstall>
+  </Actions>
+  <Build outputDirectory="../dist/actions-demo/main" outputFile="Setup.msi"><Cabinet storage="embedded" split="none" /></Build>
+</ExpressMsiBuilderProject>

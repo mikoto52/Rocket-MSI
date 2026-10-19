@@ -5,6 +5,13 @@ fn main() {
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
+    println!("cargo:rerun-if-changed=assets/installer/app-icon.ico");
+    tauri_winres::WindowsResource::new()
+        .set_icon("assets/installer/app-icon.ico")
+        .set("ProductName", "InstallEmbly")
+        .set("FileDescription", "InstallEmbly Builder CLI")
+        .compile_for(&["emb-msi"])
+        .expect("compile CLI icon resource");
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     for (arch, target) in [
         ("x86", "i686-pc-windows-msvc"),

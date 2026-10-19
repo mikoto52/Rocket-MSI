@@ -7,3 +7,6 @@ publish = false
 
 [dependencies]
 xml-rs = "=0.8.29"
+
+[build-dependencies]
+tauri-winres = "=0.3.6"

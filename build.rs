@@ -8,8 +8,8 @@ fn main() {
     println!("cargo:rerun-if-changed=assets/installer/app-icon.ico");
     tauri_winres::WindowsResource::new()
         .set_icon("assets/installer/app-icon.ico")
-        .set("ProductName", "InstallEmbly")
-        .set("FileDescription", "InstallEmbly Builder CLI")
+        .set("ProductName", "Rocket MSI")
+        .set("FileDescription", "Rocket MSI Builder CLI")
         .compile_for(&["emb-msi"])
         .expect("compile CLI icon resource");
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());

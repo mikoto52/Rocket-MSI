@@ -8,7 +8,7 @@ Windows 전용 Tauri 2 데스크톱 앱이다. UI는 로컬 HTML/CSS/JavaScript�
 
 ## 실행
 
-완성된 실행 파일은 `dist/builder/InstallEmblyBuilder.exe`에 둔다. Windows WebView2 Runtime이 필요하다. 앱은 관리자 권한으로 실행할 필요가 없으며 프로그램을 빌드만 한다. MSI 실제 설치는 사용자가 별도로 진행한다.
+완성된 실행 파일은 `dist/builder/RocketMsiBuilder.exe`에 둔다. Windows WebView2 Runtime이 필요하다. 앱은 관리자 권한으로 실행할 필요가 없으며 프로그램을 빌드만 한다. MSI 실제 설치는 사용자가 별도로 진행한다.
 
 소스에서 실행/검사:
 
@@ -75,14 +75,14 @@ GUI 예제 시험은 `examples/MyApp.embproj`를 열고 새 outputDirectory를 �
 
 ## CLI 배포 및 makecab 창 숨김
 
-`scripts/build-builder.ps1`은 `dist/builder/InstallEmblyBuilder.exe`(GUI), `dist/builder/InstallEmblyBuilderCli.exe`(콘솔 CLI)를 함께 생성한다. CLI는 GUI/WebView2 없이 동일한 Rust 엔진으로 embproj를 빌드한다. makecab은 두 빌더 모두 CREATE_NO_WINDOW로 실행하고 출력/오류를 캡처한다.
+`scripts/build-builder.ps1`은 `dist/builder/RocketMsiBuilder.exe`(GUI), `dist/builder/RocketMsiBuilderCli.exe`(콘솔 CLI)를 함께 생성한다. CLI는 GUI/WebView2 없이 동일한 Rust 엔진으로 embproj를 빌드한다. makecab은 두 빌더 모두 CREATE_NO_WINDOW로 실행하고 출력/오류를 캡처한다.
 
 ```powershell
-.\InstallEmblyBuilderCli.exe --help
-.\InstallEmblyBuilderCli.exe validate "D:\path\MyProject.embproj"
-.\InstallEmblyBuilderCli.exe build "D:\path\MyProject.embproj"
+.\RocketMsiBuilderCli.exe --help
+.\RocketMsiBuilderCli.exe validate "D:\path\MyProject.embproj"
+.\RocketMsiBuilderCli.exe build "D:\path\MyProject.embproj"
 # build 생략도 지원
-.\InstallEmblyBuilderCli.exe "D:\path\MyProject.embproj"
+.\RocketMsiBuilderCli.exe "D:\path\MyProject.embproj"
 ```
 
 CLI 종료 코드는 성공 0, 오류 1이다. 상대 경로는 실행 위치가 아닌 프로젝트 폴더를 기준으로 해석한다. 출력 위치/파일명은 embproj의 Build 설정을 따르고 기존 출력은 덮어쓰지 않는다. CLI 자체는 콘솔 출력을 유지하며 MSI를 설치하거나 사용자 실행 항목을 실행하지 않는다. init/normalize/verify 및 기존 원본 경로 직접 빌드 명령도 유지한다.

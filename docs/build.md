@@ -1,4 +1,4 @@
-# InstallEmbly 빌드 안내
+# Rocket MSI 빌드 안내
 
 이 문서는 Windows에서 소스를 준비하고 GUI·CLI 실행 파일을 만드는 방법을 설명합니다. 빌드 스크립트는 실행 파일을 생성하며 프로그램 설치나 MSI 설치는 실행하지 않습니다.
 
@@ -50,8 +50,8 @@ powershell -NoProfile -File scripts/build-builder.ps1
 
 | 출력 | 용도 |
 |---|---|
-| `dist/builder/InstallEmblyBuilder.exe` | GUI 프로젝트 편집기 및 MSI 빌더 |
-| `dist/builder/InstallEmblyBuilderCli.exe` | `.embproj` 빌드용 콘솔 도구 |
+| `dist/builder/RocketMsiBuilder.exe` | GUI 프로젝트 편집기 및 MSI 빌더 |
+| `dist/builder/RocketMsiBuilderCli.exe` | `.embproj` 빌드용 콘솔 도구 |
 | `dist/builder/dependencies.json` | 의존성 버전·라이선스 목록 |
 | `dist/builder/THIRD-PARTY-NOTICES.md` | 외부 의존성 안내 |
 | `dist/builder/licenses/` | 의존성 라이선스·고지 파일 |
@@ -62,10 +62,10 @@ powershell -NoProfile -File scripts/build-builder.ps1
 
 ```powershell
 cargo build --release --offline
-# target/release/emb-msi.exe → 배포명 InstallEmblyBuilderCli.exe
+# target/release/emb-msi.exe → 배포명 RocketMsiBuilderCli.exe
 
 cargo build --manifest-path builder/Cargo.toml --release --offline
-# builder/target/release/install-embly-builder.exe → 배포명 InstallEmblyBuilder.exe
+# builder/target/release/install-embly-builder.exe → 배포명 RocketMsiBuilder.exe
 ```
 
 ## 4. 개발 실행
@@ -88,21 +88,21 @@ GUI는 프로젝트를 저장한 뒤 MSI를 빌드합니다. 경로와 예제 �
 
 ## 5. embproj에서 MSI 생성
 
-아래는 **InstallEmbly 자체를 컴파일하는 명령이 아니라**, 완성된 CLI로 프로젝트의 설치 패키지를 만드는 명령입니다.
+아래는 **Rocket MSI 자체를 컴파일하는 명령이 아니라**, 완성된 CLI로 프로젝트의 설치 패키지를 만드는 명령입니다.
 
 ```powershell
-.\dist\builder\InstallEmblyBuilderCli.exe --help
-.\dist\builder\InstallEmblyBuilderCli.exe init "D:\projects\MyProject.embproj"
+.\dist\builder\RocketMsiBuilderCli.exe --help
+.\dist\builder\RocketMsiBuilderCli.exe init "D:\projects\MyProject.embproj"
 
 # 생성한 프로젝트의 제품 정보·Source/Files·출력 위치를 먼저 설정합니다.
-.\dist\builder\InstallEmblyBuilderCli.exe validate "D:\projects\MyProject.embproj"
-.\dist\builder\InstallEmblyBuilderCli.exe build "D:\projects\MyProject.embproj"
+.\dist\builder\RocketMsiBuilderCli.exe validate "D:\projects\MyProject.embproj"
+.\dist\builder\RocketMsiBuilderCli.exe build "D:\projects\MyProject.embproj"
 
 # 프로젝트 경로만 넘겨도 빌드합니다.
-.\dist\builder\InstallEmblyBuilderCli.exe "D:\projects\MyProject.embproj"
+.\dist\builder\RocketMsiBuilderCli.exe "D:\projects\MyProject.embproj"
 
 # 설치 없이 패키지 구조를 확인합니다.
-.\dist\builder\InstallEmblyBuilderCli.exe verify "D:\projects\dist\Setup.msi"
+.\dist\builder\RocketMsiBuilderCli.exe verify "D:\projects\dist\Setup.msi"
 ```
 
 - 소스·약관·출력 상대 경로의 기준은 **프로젝트 파일이 있는 폴더**입니다.

@@ -14,7 +14,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.is_empty() || (args.len() == 1 && (args[0] == "--help" || args[0] == "-h")) {
         println!(
-            "InstallEmblyBuilderCli\n\nUsage:\n  InstallEmblyBuilderCli.exe build <project.embproj>\n  InstallEmblyBuilderCli.exe <project.embproj>\n  InstallEmblyBuilderCli.exe validate <project.embproj>\n  InstallEmblyBuilderCli.exe init <new-project.embproj>\n  InstallEmblyBuilderCli.exe normalize <project.embproj> <new.embproj>\n  InstallEmblyBuilderCli.exe verify <package.msi>\n\nBuilds MSI without installing it. Relative paths are based on the project file.\nExit code: 0 on success, 1 on error. Existing output files are not overwritten."
+            "RocketMsiBuilderCli\n\nUsage:\n  RocketMsiBuilderCli.exe build <project.embproj>\n  RocketMsiBuilderCli.exe <project.embproj>\n  RocketMsiBuilderCli.exe validate <project.embproj>\n  RocketMsiBuilderCli.exe init <new-project.embproj>\n  RocketMsiBuilderCli.exe normalize <project.embproj> <new.embproj>\n  RocketMsiBuilderCli.exe verify <package.msi>\n\nBuilds MSI without installing it. Relative paths are based on the project file.\nExit code: 0 on success, 1 on error. Existing output files are not overwritten."
         );
         return Ok(());
     }
@@ -55,7 +55,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args.len() < 3 || args[0] != "build" {
         return Err(
-            "Usage: InstallEmblyBuilderCli.exe init <project.embproj> | validate <project.embproj> | normalize <project.embproj> <new.embproj> | build <project.embproj> | build <source-file-or-folder> <output.msi> [--license <terms.txt|terms.rtf>] [--branding-text <text>] [--cab-storage embedded|external] [--cab-size-mib 1..2047] [--launch-file <relative.exe>] [--launch-arg <value>]... | verify <package.msi>".into(),
+            "Usage: RocketMsiBuilderCli.exe init <project.embproj> | validate <project.embproj> | normalize <project.embproj> <new.embproj> | build <project.embproj> | build <source-file-or-folder> <output.msi> [--license <terms.txt|terms.rtf>] [--branding-text <text>] [--cab-storage embedded|external] [--cab-size-mib 1..2047] [--launch-file <relative.exe>] [--launch-arg <value>]... | verify <package.msi>".into(),
         );
     }
     let mut license_path = None;
@@ -116,7 +116,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         std::path::Path::new(&args[1]),
         std::path::Path::new(&args[2]),
         license_path,
-        branding.unwrap_or("InstallEmbly"),
+        branding.unwrap_or("Rocket MSI"),
         storage.unwrap_or(package::CabStorage::Embedded),
         cab_limit,
         launch.as_ref(),

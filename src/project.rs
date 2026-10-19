@@ -966,7 +966,7 @@ impl Project {
             output_directory: "./dist".into(),
             output_file: "Setup.msi".into(),
             license: None,
-            branding: "InstallEmbly".into(),
+            branding: "Rocket MSI".into(),
             storage: CabStorage::Embedded,
             cab_limit: None,
             launch: None,
@@ -1069,7 +1069,7 @@ impl Project {
             output_directory: build.attr("outputDirectory")?.into(),
             output_file: build.attr("outputFile")?.into(),
             license: None,
-            branding: "InstallEmbly".into(),
+            branding: "Rocket MSI".into(),
             storage: CabStorage::Embedded,
             cab_limit: None,
             launch: None,
@@ -1114,8 +1114,8 @@ impl Project {
             }
             if let Some(n) = ui.optional("BrandingText")? {
                 n.check(&[], &[], true)?;
-                result.branding = if n.text == "Express MSI Builder" {
-                    "InstallEmbly".into()
+                result.branding = if n.text == "Express MSI Builder" || n.text == "InstallEmbly" {
+                    "Rocket MSI".into()
                 } else {
                     n.text.clone()
                 };

@@ -1,4 +1,4 @@
-param([string]$Cli = (Join-Path $PSScriptRoot '../dist/builder/InstallEmblyBuilderCli.exe'))
+param([string]$Cli = (Join-Path $PSScriptRoot '../dist/builder/RocketMsiBuilderCli.exe'))
 $ErrorActionPreference = 'Stop'
 $exe = [IO.Path]::GetFullPath($Cli)
 if (!(Test-Path -LiteralPath $exe -PathType Leaf)) { throw "CLI not found: $exe" }

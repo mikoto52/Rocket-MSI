@@ -1,6 +1,6 @@
-# InstallEmbly
+# Rocket MSI
 
-InstallEmbly는 Windows Installer 패키지(`.msi`)를 만드는 **Windows 전용 설치 빌더**입니다. Rust로 구현한 자체 MSI 엔진과 Tauri 2 기반 GUI를 사용하며, WiX에 의존하지 않습니다. 프로젝트는 XML 기반 **`.embproj`** 파일로 저장합니다.
+Rocket MSI는 Windows Installer 패키지(`.msi`)를 만드는 **Windows 전용 설치 빌더**입니다. Rust로 구현한 자체 MSI 엔진과 Tauri 2 기반 GUI를 사용하며, WiX에 의존하지 않습니다. 프로젝트는 XML 기반 **`.embproj`** 파일로 저장합니다.
 
 현재는 기능 구현과 검증을 진행하는 개발 버전입니다.
 
@@ -30,8 +30,8 @@ InstallEmbly는 Windows Installer 패키지(`.msi`)를 만드는 **Windows 전�
 
 배포용 실행 파일은 빌드 후 `dist/builder`에 생성됩니다.
 
-- **InstallEmblyBuilder.exe**: 프로젝트를 편집하고 MSI를 만드는 GUI
-- **InstallEmblyBuilderCli.exe**: `.embproj`를 빌드하는 콘솔 도구
+- **RocketMsiBuilder.exe**: 프로젝트를 편집하고 MSI를 만드는 GUI
+- **RocketMsiBuilderCli.exe**: `.embproj`를 빌드하는 콘솔 도구
 
 GUI에는 **Microsoft Edge WebView2 Runtime**이 필요합니다. CLI에는 WebView2가 필요하지 않습니다. 두 도구 모두 Windows의 `makecab.exe`를 사용합니다.
 
@@ -50,16 +50,16 @@ GUI에는 **Microsoft Edge WebView2 Runtime**이 필요합니다. CLI에는 WebV
 `dist/builder`에서 실행하는 예입니다.
 
 ```powershell
-.\InstallEmblyBuilderCli.exe --help
-.\InstallEmblyBuilderCli.exe init "D:\projects\MyProject.embproj"
-.\InstallEmblyBuilderCli.exe validate "D:\projects\MyProject.embproj"
-.\InstallEmblyBuilderCli.exe build "D:\projects\MyProject.embproj"
+.\RocketMsiBuilderCli.exe --help
+.\RocketMsiBuilderCli.exe init "D:\projects\MyProject.embproj"
+.\RocketMsiBuilderCli.exe validate "D:\projects\MyProject.embproj"
+.\RocketMsiBuilderCli.exe build "D:\projects\MyProject.embproj"
 
 # build 명령을 생략해도 됩니다.
-.\InstallEmblyBuilderCli.exe "D:\projects\MyProject.embproj"
+.\RocketMsiBuilderCli.exe "D:\projects\MyProject.embproj"
 
 # 생성한 MSI의 패키지 구조를 확인합니다. 설치하지 않습니다.
-.\InstallEmblyBuilderCli.exe verify "D:\projects\dist\Setup.msi"
+.\RocketMsiBuilderCli.exe verify "D:\projects\dist\Setup.msi"
 ```
 
 `init`으로 생성한 프로젝트는 원본 폴더 등 설정을 수정한 뒤 빌드합니다. 소스·약관·출력의 상대 경로는 **실행 위치가 아닌 프로젝트 파일의 폴더**를 기준으로 해석합니다. 출력 위치와 파일명은 프로젝트의 `Build` 설정을 따릅니다.
@@ -117,7 +117,7 @@ powershell -NoProfile -File scripts/test-builder-cli.ps1
 
 ## 배포 및 라이선스
 
-InstallEmbly는 무료 배포와 소스 공개를 목표로 개발합니다. 프로젝트 자체의 소스코드 라이선스는 아직 선정하지 않았습니다. 외부 의존성의 라이선스 안내는 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)와 [빌더 의존성 안내](builder/THIRD-PARTY-NOTICES.md)를 참고하세요.
+Rocket MSI는 무료 배포와 소스 공개를 목표로 개발합니다. 프로젝트 자체의 소스코드 라이선스는 아직 선정하지 않았습니다. 외부 의존성의 라이선스 안내는 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)와 [빌더 의존성 안내](builder/THIRD-PARTY-NOTICES.md)를 참고하세요.
 
 ## 관련 문서
 

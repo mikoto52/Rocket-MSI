@@ -51,7 +51,7 @@ async fn open_project(state: State<'_, AppState>) -> Result<Option<Draft>, Strin
     idle(&state)?;
     let path = tauri::async_runtime::spawn_blocking(|| {
         rfd::FileDialog::new()
-            .add_filter("InstallEmbly 프로젝트", &["embproj"])
+            .add_filter("Rocket MSI 프로젝트", &["embproj"])
             .pick_file()
     })
     .await
@@ -202,7 +202,7 @@ async fn save_project(
     let path = if save_as || old.is_none() {
         tauri::async_runtime::spawn_blocking(|| {
             rfd::FileDialog::new()
-                .add_filter("InstallEmbly 프로젝트", &["embproj"])
+                .add_filter("Rocket MSI 프로젝트", &["embproj"])
                 .set_file_name("MyProject.embproj")
                 .save_file()
         })

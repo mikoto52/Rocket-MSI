@@ -195,7 +195,6 @@ pub fn build_selected(
             },
         ),
         ("BrandingText", branding),
-        ("MaintenanceChoice", "Repair"),
     ] {
         db.insert("Property", &["Property", "Value"], &[T(key), T(value)])?;
     }
@@ -348,6 +347,14 @@ pub fn build_selected(
             "BannerArt",
             include_bytes!("../assets/installer/banner.bmp").as_slice(),
         ),
+        (
+            "RepairArt",
+            include_bytes!("../assets/installer/repair.bmp").as_slice(),
+        ),
+        (
+            "RemoveArt",
+            include_bytes!("../assets/installer/remove.bmp").as_slice(),
+        ),
     ] {
         let path = work.0.join(format!("{name}.bmp"));
         fs::write(&path, bytes)?;
@@ -363,8 +370,14 @@ pub fn build_selected(
             "amus"
         },
     )?;
+    let footer_width = msi::branding_width(branding)?;
+    db.execute(&format!(
+        "UPDATE `Control` SET `Width` = {footer_width} WHERE `Control` = 'Branding'"
+    ))?;
     if !product.allow_directory_change {
         db.execute("UPDATE `Control` SET `Attributes` = 1 WHERE `Dialog_` = 'Path' AND `Control` = 'Folder'")?;
+        db.execute("UPDATE `Control` SET `Attributes` = 1 WHERE `Dialog_` = 'Path' AND `Control` = 'Browse'")?;
+        db.execute("UPDATE `Control` SET `Text` = '이 폴더에 [ProductName]을(를) 설치하려면, \"다음\"을 눌러주세요.' WHERE `Dialog_` = 'Path' AND `Control` = 'PathLabel'")?;
     }
     if let Some(launch) = launch {
         author_finish_launch(&db, &files, launch)?;
@@ -668,7 +681,7 @@ fn dialog(
             T(cancel),
         ],
     )?;
-    let welcome = name == "Welcome";
+    let welcome = matches!(name, "Welcome" | "Cancelled" | "Complete");
     control(
         db,
         name,
@@ -683,15 +696,17 @@ fn dialog(
         None,
     )?;
     let title = match name {
-        "Welcome" => "{\\Heading}[ProductName]\n설치 마법사",
-        "Path" => "{\\Heading}설치 위치 선택",
-        "License" => "{\\Heading}이용약관",
-        "Ready" => "{\\Heading}설치 준비 완료",
-        "Maintenance" => "{\\Heading}프로그램 유지보수",
-        "Progress" => "{\\Heading}작업 진행 중",
-        "Complete" => "{\\Heading}작업 완료",
-        "Cancelled" => "{\\Heading}설치 취소",
-        _ => "{\\Heading}작업 실패",
+        "Welcome" => "{\\Heading}[ProductName] [BrandingText] 마법사에 오신것을 환영합니다.",
+        "Path" => "{\\PageHeading}설치 폴더 선택",
+        "License" => "{\\PageHeading}사용권 계약",
+        "Ready" => "{\\PageHeading}설치 준비 완료",
+        "Maintenance" => "{\\PageHeading}설치 복구 및 제거",
+        "RepairReady" => "{\\PageHeading}[ProductName] 복구",
+        "RemoveReady" => "{\\PageHeading}[ProductName] 제거",
+        "Progress" => "{\\PageHeading}[ProductName]을(를) 설치합니다.",
+        "Complete" => "{\\Heading}[BrandingText] 마법사가 완료되었습니다.",
+        "Cancelled" => "{\\Heading}[BrandingText] 마법사가 중단되었습니다.",
+        _ => "{\\PageHeading}작업 실패",
     };
     control(
         db,
@@ -701,7 +716,7 @@ fn dialog(
         if welcome { 150 } else { 20 },
         if welcome { 28 } else { 8 },
         if welcome { 220 } else { 285 },
-        if welcome { 55 } else { 24 },
+        if welcome { 65 } else { 24 },
         None,
         title,
         None,
@@ -730,7 +745,23 @@ fn dialog(
             285,
             14,
             None,
-            "[ProductName] · [ProductVersion]",
+            if name == "Path" {
+                "[ProductName]을(를) 설치할 폴더를 선택해 주세요."
+            } else if name == "Progress" {
+                "선택한 프로그램을 설치합니다."
+            } else if name == "Ready" {
+                "[ProductName]을 설치할 준비가 되었습니다."
+            } else if name == "Maintenance" {
+                "수행할 작업을 선택해주세요."
+            } else if name == "License" {
+                "다음의 사용권 계약을 잘 읽어보시기 바랍니다."
+            } else if name == "RepairReady" {
+                "사용자의 시스템에서 이 프로그램을 복구합니다."
+            } else if name == "RemoveReady" {
+                "사용자의 시스템에서 이 프로그램을 제거합니다."
+            } else {
+                "[ProductName] - [ProductVersion]"
+            },
             None,
         )?;
         control(
@@ -826,9 +857,9 @@ fn author_finish_launch(
         "Complete",
         "Launch",
         "CheckBox",
-        20,
+        150,
         202,
-        350,
+        220,
         20,
         Some("LAUNCHAFTERINSTALL"),
         "설치한 프로그램 실행(&R)",
@@ -889,7 +920,7 @@ fn author_finish_launch(
         ],
     )?;
     db.execute("UPDATE `ControlEvent` SET `Ordering` = 3 WHERE `Dialog_` = 'Complete' AND `Control_` = 'Finish' AND `Event` = 'EndDialog'")?;
-    db.execute("UPDATE `Control` SET `Text` = '마침' WHERE `Dialog_` = 'Complete' AND `Control` = 'Finish'")?;
+    db.execute("UPDATE `Control` SET `Text` = '마침(&F)' WHERE `Dialog_` = 'Complete' AND `Control` = 'Finish'")?;
     Ok(())
 }
 
@@ -960,6 +991,148 @@ fn event(db: &Database, dlg: &str, button: &str, kind: &str, arg: &str, order: i
         &[T(dlg), T(button), T(kind), T(arg), T("1"), I(order)],
     )
 }
+fn cancel_confirmation(db: &Database, license: bool) -> Result<()> {
+    db.insert(
+        "Dialog",
+        &[
+            "Dialog",
+            "HCentering",
+            "VCentering",
+            "Width",
+            "Height",
+            "Attributes",
+            "Title",
+            "Control_First",
+            "Control_Default",
+            "Control_Cancel",
+        ],
+        &[
+            T("ConfirmCancel"),
+            I(50),
+            I(50),
+            I(300),
+            I(100),
+            I(3),
+            T("[ProductName] - 취소 확인"),
+            T("No"),
+            T("No"),
+            T("No"),
+        ],
+    )?;
+    control(
+        db,
+        "ConfirmCancel",
+        "Body",
+        "Text",
+        15,
+        15,
+        270,
+        42,
+        None,
+        "[ProductName] [EMB_CANCEL_ACTION]를 정말로 취소하시겠습니까?",
+        None,
+    )?;
+    control(
+        db,
+        "ConfirmCancel",
+        "Yes",
+        "PushButton",
+        144,
+        72,
+        66,
+        18,
+        None,
+        "예(&Y)",
+        Some("No"),
+    )?;
+    control(
+        db,
+        "ConfirmCancel",
+        "No",
+        "PushButton",
+        218,
+        72,
+        66,
+        18,
+        None,
+        "아니요(&N)",
+        Some("Yes"),
+    )?;
+    event(db, "ConfirmCancel", "Yes", "EndDialog", "Exit", 1)?;
+    event(db, "ConfirmCancel", "No", "EndDialog", "Return", 1)?;
+    for dlg in [
+        "Welcome",
+        "License",
+        "Path",
+        "Ready",
+        "Maintenance",
+        "RepairReady",
+        "RemoveReady",
+        "Progress",
+    ] {
+        if dlg == "License" && !license {
+            continue;
+        }
+        db.execute(&format!(
+            "DELETE FROM `ControlEvent` WHERE `Dialog_` = '{dlg}' AND `Control_` = 'Cancel'"
+        ))?;
+        let choices: Vec<(&str, &str)> = match dlg {
+            "RepairReady" => vec![("복구", "1")],
+            "RemoveReady" => vec![("제거", "1")],
+            "Maintenance" => vec![
+                ("유지보수", "1"),
+                ("복구", "MaintenanceChoice = \"Repair\""),
+                ("제거", "MaintenanceChoice = \"Remove\""),
+            ],
+            "Progress" => vec![
+                ("설치", "1"),
+                ("유지보수", "Installed"),
+                ("복구", "REINSTALL OR MaintenanceChoice = \"Repair\""),
+                (
+                    "제거",
+                    "REMOVE ~= \"ALL\" OR MaintenanceChoice = \"Remove\"",
+                ),
+            ],
+            _ => vec![("설치", "1")],
+        };
+        for (i, (action, condition)) in choices.iter().enumerate() {
+            db.insert(
+                "ControlEvent",
+                &[
+                    "Dialog_",
+                    "Control_",
+                    "Event",
+                    "Argument",
+                    "Condition",
+                    "Ordering",
+                ],
+                &[
+                    T(dlg),
+                    T("Cancel"),
+                    T("[EMB_CANCEL_ACTION]"),
+                    T(action),
+                    T(condition),
+                    I(i as i32 + 1),
+                ],
+            )?;
+        }
+        event(db, dlg, "Cancel", "SpawnDialog", "ConfirmCancel", 10)?;
+    }
+    for (action, condition) in [
+        (
+            "Enable",
+            "MaintenanceChoice = \"Repair\" OR MaintenanceChoice = \"Remove\"",
+        ),
+        ("Disable", "NOT MaintenanceChoice"),
+    ] {
+        db.insert(
+            "ControlCondition",
+            &["Dialog_", "Control_", "Action", "Condition"],
+            &[T("Maintenance"), T("Proceed"), T(action), T(condition)],
+        )?;
+    }
+    Ok(())
+}
 fn button(db: &Database, dlg: &str, id: &str, x: i32, text: &str, next: &str) -> Result<()> {
     control(
         db,
@@ -975,8 +1148,141 @@ fn button(db: &Database, dlg: &str, id: &str, x: i32, text: &str, next: &str) ->
         Some(next),
     )
 }
+fn browse_folder(db: &Database) -> Result<()> {
+    db.insert(
+        "Dialog",
+        &[
+            "Dialog",
+            "HCentering",
+            "VCentering",
+            "Width",
+            "Height",
+            "Attributes",
+            "Title",
+            "Control_First",
+            "Control_Default",
+            "Control_Cancel",
+        ],
+        &[
+            T("BrowseFolder"),
+            I(50),
+            I(50),
+            I(300),
+            I(240),
+            I(3),
+            T("[ProductName] - 설치 폴더 찾아보기"),
+            T("Combo"),
+            T("Select"),
+            T("Cancel"),
+        ],
+    )?;
+    control(
+        db,
+        "BrowseFolder",
+        "Combo",
+        "DirectoryCombo",
+        12,
+        12,
+        216,
+        80,
+        Some("EMB_BROWSE_PATH"),
+        "폴더 위치",
+        Some("Up"),
+    )?;
+    db.execute("UPDATE `Control` SET `Attributes` = 2031619 WHERE `Dialog_` = 'BrowseFolder' AND `Control` = 'Combo'")?;
+    control(
+        db,
+        "BrowseFolder",
+        "Up",
+        "PushButton",
+        236,
+        12,
+        52,
+        18,
+        None,
+        "상위 폴더",
+        Some("List"),
+    )?;
+    control(
+        db,
+        "BrowseFolder",
+        "List",
+        "DirectoryList",
+        12,
+        40,
+        276,
+        132,
+        Some("EMB_BROWSE_PATH"),
+        "하위 폴더",
+        Some("Folder"),
+    )?;
+    control(
+        db,
+        "BrowseFolder",
+        "Folder",
+        "PathEdit",
+        12,
+        182,
+        276,
+        20,
+        Some("EMB_BROWSE_PATH"),
+        "",
+        Some("Select"),
+    )?;
+    control(
+        db,
+        "BrowseFolder",
+        "Select",
+        "PushButton",
+        120,
+        214,
+        80,
+        18,
+        None,
+        "확인",
+        Some("Cancel"),
+    )?;
+    control(
+        db,
+        "BrowseFolder",
+        "Cancel",
+        "PushButton",
+        208,
+        214,
+        80,
+        18,
+        None,
+        "취소(&C)",
+        Some("Combo"),
+    )?;
+    event(db, "BrowseFolder", "Up", "DirectoryListUp", "0", 1)?;
+    event(
+        db,
+        "BrowseFolder",
+        "Select",
+        "[INSTALLDIR]",
+        "[EMB_BROWSE_PATH]",
+        1,
+    )?;
+    event(
+        db,
+        "BrowseFolder",
+        "Select",
+        "SetTargetPath",
+        "INSTALLDIR",
+        2,
+    )?;
+    event(db, "BrowseFolder", "Select", "EndDialog", "Return", 3)?;
+    event(db, "BrowseFolder", "Cancel", "EndDialog", "Return", 1)?;
+    Ok(())
+}
 fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
-    for (name, size, bits) in [("Normal", 9, 0), ("Heading", 12, 1), ("Branding", 8, 0)] {
+    for (name, size, bits) in [
+        ("Normal", 9, 0),
+        ("Heading", 12, 1),
+        ("PageHeading", 10, 1),
+        ("Branding", 8, 0),
+    ] {
         db.insert(
             "TextStyle",
             &["TextStyle", "FaceName", "Size", "StyleBits"],
@@ -994,11 +1300,11 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
         220,
         110,
         None,
-        "설치 마법사에 오신 것을 환영합니다.\n\n마법사의 안내에 따라 프로그램을 설치합니다.\n계속하려면 다음을 누르세요.",
+        "[BrandingText] 마법사를 사용하여 사용자의 시스템에 [ProductName]을 설치합니다. 계속 하시려면 다음을 누르시고, 설치 마법사를 종료하시려면 취소를 눌러주세요.",
         None,
     )?;
     button(db, "Welcome", "Next", BUTTON_NEXT_X, "다음(&N) >", "Cancel")?;
-    button(db, "Welcome", "Cancel", BUTTON_CANCEL_X, "취소", "Next")?;
+    button(db, "Welcome", "Cancel", BUTTON_CANCEL_X, "취소(&C)", "Next")?;
     event(
         db,
         "Welcome",
@@ -1024,6 +1330,7 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
             rtf,
             Some("Accept"),
         )?;
+        db.execute("UPDATE `Control` SET `Attributes` = 7 WHERE `Dialog_` = 'License' AND `Control` = 'Terms'")?;
         control(
             db,
             "License",
@@ -1042,9 +1349,16 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
             &["Property", "Value"],
             &[T("ACCEPTLICENSE"), T("1")],
         )?;
-        button(db, "License", "Back", BUTTON_BACK_X, "< 이전(&B)", "Next")?;
+        button(db, "License", "Back", BUTTON_BACK_X, "< 뒤로(&B)", "Next")?;
         button(db, "License", "Next", BUTTON_NEXT_X, "다음(&N) >", "Cancel")?;
-        button(db, "License", "Cancel", BUTTON_CANCEL_X, "취소", "Terms")?;
+        button(
+            db,
+            "License",
+            "Cancel",
+            BUTTON_CANCEL_X,
+            "취소(&C)",
+            "Terms",
+        )?;
         db.execute("UPDATE `Control` SET `Attributes` = 1 WHERE `Dialog_` = 'License' AND `Control` = 'Next'")?;
         for (action, condition) in [
             ("Enable", "ACCEPTLICENSE = \"1\""),
@@ -1087,9 +1401,9 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
         20,
         82,
         350,
-        30,
+        44,
         None,
-        "설치할 폴더를 입력하세요.",
+        "이 폴더에 [ProductName]을(를) 설치하려면, \"다음\"을 눌러주세요. 다른 폴더에 설치하시려면 아래 필드에 입력하거나, \"찾아보기\"를 눌러주세요.",
         Some("Folder"),
     )?;
     control(
@@ -1098,16 +1412,39 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
         "Folder",
         "PathEdit",
         20,
-        118,
-        350,
+        136,
+        266,
         22,
         Some("INSTALLDIR"),
         "",
+        Some("Browse"),
+    )?;
+    control(
+        db,
+        "Path",
+        "Browse",
+        "PushButton",
+        294,
+        136,
+        76,
+        22,
+        None,
+        "찾아보기...",
         Some("Back"),
     )?;
-    button(db, "Path", "Back", BUTTON_BACK_X, "< 이전(&B)", "Next")?;
+    event(db, "Path", "Browse", "[EMB_BROWSE_PATH]", "[INSTALLDIR]", 1)?;
+    event(db, "Path", "Browse", "SpawnDialog", "BrowseFolder", 2)?;
+    browse_folder(db)?;
+    button(db, "Path", "Back", BUTTON_BACK_X, "< 뒤로(&B)", "Next")?;
     button(db, "Path", "Next", BUTTON_NEXT_X, "다음(&N) >", "Cancel")?;
-    button(db, "Path", "Cancel", BUTTON_CANCEL_X, "취소", "PathLabel")?;
+    button(
+        db,
+        "Path",
+        "Cancel",
+        BUTTON_CANCEL_X,
+        "취소(&C)",
+        "PathLabel",
+    )?;
     event(
         db,
         "Path",
@@ -1135,47 +1472,84 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
         350,
         120,
         None,
-        "설치를 시작할 준비가 되었습니다.\n\n설치 위치:\n[INSTALLDIR]\n\n설치를 누르면 파일을 복사합니다.",
+        "설치를 시작하려면 \"설치\"를 눌러주세요. 설치 설정을 검토 또는 수정하려면 \"뒤로\"를 누르시고, 설치 마법사를 종료하시려면 \"취소\"를 눌러주세요.",
         None,
     )?;
-    button(db, "Ready", "Back", BUTTON_BACK_X, "< 이전(&B)", "Install")?;
+    button(db, "Ready", "Back", BUTTON_BACK_X, "< 뒤로(&B)", "Install")?;
     button(db, "Ready", "Install", BUTTON_NEXT_X, "설치(&I)", "Cancel")?;
-    button(db, "Ready", "Cancel", BUTTON_CANCEL_X, "취소", "Back")?;
+    button(db, "Ready", "Cancel", BUTTON_CANCEL_X, "취소(&C)", "Back")?;
     event(db, "Ready", "Back", "NewDialog", "Path", 1)?;
     event(db, "Ready", "Install", "EndDialog", "Return", 1)?;
     event(db, "Ready", "Cancel", "EndDialog", "Exit", 1)?;
 
-    dialog(db, "Maintenance", "ChoiceLabel", "Proceed", "Cancel", true)?;
+    dialog(db, "Maintenance", "Choice", "Proceed", "Cancel", true)?;
     control(
         db,
         "Maintenance",
-        "ChoiceLabel",
+        "RepairDescription",
         "Text",
-        20,
-        82,
-        350,
-        24,
+        140,
+        84,
+        230,
+        70,
         None,
-        "수행할 작업을 선택한 뒤 진행을 누르세요.",
-        Some("Choice"),
+        "프로그램을 가장 최근 설치 상태로 복구합니다. - 누락 혹은 손상된 파일, 바로가기 및 레지스트리 항목을 수정할 수 있습니다.",
+        None,
+    )?;
+    control(
+        db,
+        "Maintenance",
+        "RemoveDescription",
+        "Text",
+        140,
+        174,
+        230,
+        42,
+        None,
+        "시스템에서 [ProductName]을(를) 제거합니다.",
+        None,
+    )?;
+    control(
+        db,
+        "Maintenance",
+        "RepairIcon",
+        "Bitmap",
+        20,
+        78,
+        32,
+        32,
+        None,
+        "RepairArt",
+        None,
+    )?;
+    control(
+        db,
+        "Maintenance",
+        "RemoveIcon",
+        "Bitmap",
+        20,
+        168,
+        32,
+        32,
+        None,
+        "RemoveArt",
+        None,
     )?;
     control(
         db,
         "Maintenance",
         "Choice",
         "RadioButtonGroup",
-        20,
-        112,
-        350,
-        94,
+        60,
+        78,
+        72,
+        142,
         Some("MaintenanceChoice"),
         "",
         Some("Proceed"),
     )?;
-    for (order, value, y, text) in [
-        (1, "Repair", 0, "복구(&P) - 설치 파일을 원본으로 복원"),
-        (2, "Remove", 46, "제거(&R) - 설치한 프로그램 삭제"),
-    ] {
+    for (order, value, y, text) in [(1, "Repair", 0, "복구(&P)"), (2, "Remove", 90, "제거(&R)")]
+    {
         db.insert(
             "RadioButton",
             &[
@@ -1187,18 +1561,20 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
                 T(value),
                 I(0),
                 I(y),
-                I(340),
+                I(72),
                 I(24),
                 T(text),
             ],
         )?;
     }
+    // Keep descriptions outside the radio group's entire painted rectangle.
+    // Native radio labels retain their click targets and keyboard shortcuts.
     button(
         db,
         "Maintenance",
         "Proceed",
         BUTTON_NEXT_X,
-        "진행 >",
+        "실행(&E)",
         "Cancel",
     )?;
     button(
@@ -1206,11 +1582,14 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
         "Maintenance",
         "Cancel",
         BUTTON_CANCEL_X,
-        "취소",
-        "ChoiceLabel",
+        "취소(&C)",
+        "Choice",
     )?;
-    for (condition, events) in [
+    for (name, action, label, condition, events) in [
         (
+            "RepairReady",
+            "복구",
+            "복구(&P)",
             "MaintenanceChoice = \"Repair\"",
             vec![
                 ("[REMOVE]", "{}"),
@@ -1219,10 +1598,52 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
             ],
         ),
         (
+            "RemoveReady",
+            "제거",
+            "제거(&R)",
             "MaintenanceChoice = \"Remove\"",
             vec![("[REINSTALL]", "{}"), ("[REMOVE]", "ALL")],
         ),
     ] {
+        db.insert(
+            "ControlEvent",
+            &[
+                "Dialog_",
+                "Control_",
+                "Event",
+                "Argument",
+                "Condition",
+                "Ordering",
+            ],
+            &[
+                T("Maintenance"),
+                T("Proceed"),
+                T("NewDialog"),
+                T(name),
+                T(condition),
+                I(1),
+            ],
+        )?;
+        dialog(db, name, "Proceed", "Proceed", "Cancel", true)?;
+        control(
+            db,
+            name,
+            "Body",
+            "Text",
+            20,
+            82,
+            350,
+            120,
+            None,
+            &format!(
+                "사용자의 시스템에서 [ProductName]을(를) {action}하려면, \"{action}\"를 눌러주세요. 설치 설정을 검토 혹은 변경하려면 \"뒤로\"를 누르시고, 마법사를 종료하려면 \"취소\"를 눌러주세요."
+            ),
+            None,
+        )?;
+        button(db, name, "Back", BUTTON_BACK_X, "< 뒤로(&B)", "Proceed")?;
+        button(db, name, "Proceed", BUTTON_NEXT_X, label, "Cancel")?;
+        button(db, name, "Cancel", BUTTON_CANCEL_X, "취소(&C)", "Back")?;
+        event(db, name, "Back", "NewDialog", "Maintenance", 1)?;
         for (i, (kind, arg)) in events.iter().enumerate() {
             db.insert(
                 "ControlEvent",
@@ -1235,7 +1656,7 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
                     "Ordering",
                 ],
                 &[
-                    T("Maintenance"),
+                    T(name),
                     T("Proceed"),
                     T(kind),
                     T(arg),
@@ -1244,44 +1665,27 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
                 ],
             )?;
         }
+        event(db, name, "Proceed", "EndDialog", "Return", 4)?;
     }
-    db.insert(
-        "ControlEvent",
-        &[
-            "Dialog_",
-            "Control_",
-            "Event",
-            "Argument",
-            "Condition",
-            "Ordering",
-        ],
-        &[
-            T("Maintenance"),
-            T("Proceed"),
-            T("EndDialog"),
-            T("Return"),
-            T("MaintenanceChoice = \"Repair\" OR MaintenanceChoice = \"Remove\""),
-            I(4),
-        ],
-    )?;
     event(db, "Maintenance", "Cancel", "EndDialog", "Exit", 1)?;
 
     dialog(db, "Progress", "Cancel", "Cancel", "Cancel", false)?;
+    progress_text(db)?;
     control(
         db,
         "Progress",
-        "Body",
+        "StatusLabel",
         "Text",
         20,
-        82,
-        350,
-        35,
+        138,
+        30,
+        16,
         None,
-        "작업 중입니다. 잠시 기다려 주세요.",
+        "상태:",
         None,
     )?;
     control(
-        db, "Progress", "Action", "Text", 20, 125, 350, 30, None, "", None,
+        db, "Progress", "Action", "Text", 52, 138, 318, 22, None, "", None,
     )?;
     control(
         db,
@@ -1296,8 +1700,16 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
         "",
         None,
     )?;
-    button(db, "Progress", "Cancel", BUTTON_CANCEL_X, "취소", "Cancel")?;
+    button(
+        db,
+        "Progress",
+        "Cancel",
+        BUTTON_CANCEL_X,
+        "취소(&C)",
+        "Cancel",
+    )?;
     event(db, "Progress", "Cancel", "EndDialog", "Exit", 1)?;
+    cancel_confirmation(db, license.is_some())?;
     for (ctrl, ev, attr) in [
         ("Action", "ActionText", "Text"),
         ("Bar", "SetProgress", "Progress"),
@@ -1309,10 +1721,13 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
         )?;
     }
     for (name, text) in [
-        ("Complete", "작업이 완료되었습니다."),
+        (
+            "Complete",
+            "[BrandingText] 마법사가 [ProductName]을(를) 성공적으로 설치했습니다. 마법사를 종료하려면 \"마침\"을 눌러주세요.",
+        ),
         (
             "Cancelled",
-            "작업을 취소했습니다. 설치가 완료되지 않았습니다.",
+            "[ProductName] - [BrandingText] 마법사가 완료되기 전에 중단되었습니다.\n\n시스템이 변경되지 않았습니다. 나중에 이 프로그램을 설치하려면, 설치 마법사를 다시 실행해주세요.\n\n마법사를 종료하려면 \"마침\"을 눌러주세요.",
         ),
         (
             "Failed",
@@ -1320,9 +1735,142 @@ fn ui(db: &Database, license: Option<&str>, repair_mode: &str) -> Result<()> {
         ),
     ] {
         dialog(db, name, "Finish", "Finish", "Finish", true)?;
-        control(db, name, "Body", "Text", 20, 82, 350, 110, None, text, None)?;
-        button(db, name, "Finish", BUTTON_CANCEL_X, "닫기", "Finish")?;
+        let cancelled = matches!(name, "Cancelled" | "Complete");
+        control(
+            db,
+            name,
+            "Body",
+            "Text",
+            if cancelled { 150 } else { 20 },
+            if cancelled { 100 } else { 82 },
+            if cancelled { 220 } else { 350 },
+            if cancelled { 128 } else { 110 },
+            None,
+            text,
+            None,
+        )?;
+        button(
+            db,
+            name,
+            "Finish",
+            BUTTON_CANCEL_X,
+            if cancelled { "마침(&F)" } else { "닫기" },
+            "Finish",
+        )?;
         event(db, name, "Finish", "EndDialog", "Return", 1)?;
+    }
+    completion_text(db)?;
+    Ok(())
+}
+
+fn completion_text(db: &Database) -> Result<()> {
+    for (suffix, action, condition) in [
+        (
+            "",
+            "설치",
+            "NOT (REMOVE ~= \"ALL\" OR MaintenanceChoice = \"Remove\" OR REINSTALL OR MaintenanceChoice = \"Repair\")",
+        ),
+        (
+            "Repair",
+            "복구",
+            "NOT (REMOVE ~= \"ALL\" OR MaintenanceChoice = \"Remove\") AND (REINSTALL OR MaintenanceChoice = \"Repair\")",
+        ),
+        (
+            "Remove",
+            "제거",
+            "REMOVE ~= \"ALL\" OR MaintenanceChoice = \"Remove\"",
+        ),
+    ] {
+        let id = format!("Body{suffix}");
+        if !suffix.is_empty() {
+            control(
+                db,
+                "Complete",
+                &id,
+                "Text",
+                150,
+                100,
+                220,
+                90,
+                None,
+                &format!(
+                    "[BrandingText] 마법사가 [ProductName]을(를) 성공적으로 {action}했습니다. 마법사를 종료하려면 \"마침\"을 눌러주세요."
+                ),
+                None,
+            )?;
+        }
+        for (visibility, test) in [
+            ("Show", condition.to_string()),
+            ("Hide", format!("NOT ({condition})")),
+        ] {
+            db.insert(
+                "ControlCondition",
+                &["Dialog_", "Control_", "Action", "Condition"],
+                &[T("Complete"), T(&id), T(visibility), T(&test)],
+            )?;
+        }
+    }
+    // Keep the optional launch checkbox below the completion message.
+    db.execute(
+        "UPDATE `Control` SET `Height` = 90 WHERE `Dialog_` = 'Complete' AND `Control` = 'Body'",
+    )?;
+    Ok(())
+}
+
+fn progress_text(db: &Database) -> Result<()> {
+    let removing = "REMOVE ~= \"ALL\" OR MaintenanceChoice = \"Remove\"";
+    let repairing = "NOT (REMOVE ~= \"ALL\" OR MaintenanceChoice = \"Remove\") AND (REINSTALL OR MaintenanceChoice = \"Repair\")";
+    let installing = "NOT (REMOVE ~= \"ALL\" OR MaintenanceChoice = \"Remove\" OR REINSTALL OR MaintenanceChoice = \"Repair\")";
+    for (suffix, action, condition) in [
+        ("", "설치", installing),
+        ("Repair", "복구", repairing),
+        ("Remove", "제거", removing),
+    ] {
+        let heading = format!("Heading{suffix}");
+        if !suffix.is_empty() {
+            control(
+                db,
+                "Progress",
+                &heading,
+                "Text",
+                20,
+                8,
+                285,
+                24,
+                None,
+                &format!("{{\\PageHeading}}[ProductName]을(를) {action}합니다."),
+                None,
+            )?;
+            db.execute(&format!("UPDATE `Control` SET `Attributes` = 65539 WHERE `Dialog_` = 'Progress' AND `Control` = '{heading}'"))?;
+        }
+        let body = format!("Body{suffix}");
+        control(
+            db,
+            "Progress",
+            &body,
+            "Text",
+            20,
+            82,
+            350,
+            45,
+            None,
+            &format!(
+                "[BrandingText] 마법사가 [ProductName]을(를) 사용자의 시스템에 {action}하는 동안 잠시 기다려 주세요. 이 작업은 몇 분 정도 걸릴 수 있습니다."
+            ),
+            None,
+        )?;
+        for id in [&heading, &body] {
+            for (visibility, test) in [
+                ("Show", condition.to_string()),
+                ("Hide", format!("NOT ({condition})")),
+            ] {
+                db.insert(
+                    "ControlCondition",
+                    &["Dialog_", "Control_", "Action", "Condition"],
+                    &[T("Progress"), T(id), T(visibility), T(&test)],
+                )?;
+            }
+        }
     }
     Ok(())
 }
@@ -1413,7 +1961,22 @@ pub fn verify(path: &Path) -> Result<()> {
             1,
         )?
         .len();
-    if !matches!(dialog_count - error_dialog_count, 8 | 9) {
+    let browse_count = db
+        .query(
+            "SELECT `Dialog` FROM `Dialog` WHERE `Dialog` = 'BrowseFolder'",
+            1,
+        )?
+        .len();
+    let confirm_count = db
+        .query(
+            "SELECT `Dialog` FROM `Dialog` WHERE `Dialog` = 'ConfirmCancel'",
+            1,
+        )?
+        .len();
+    if !matches!(
+        dialog_count - error_dialog_count - browse_count - confirm_count,
+        10 | 11
+    ) {
         return Err("wizard dialogs missing".into());
     }
     let images = db.query("SELECT `Name` FROM `Binary`", 1)?;
@@ -1861,12 +2424,27 @@ mod tests {
                 )?[0][0],
                 "Custom Setup"
             );
+            let texts = db.query("SELECT `Text` FROM `Control` WHERE `Type` = 'Text'", 1)?;
+            assert!(
+                texts
+                    .iter()
+                    .all(|row| !row[0].contains("InstallEmbly 마법사"))
+            );
+            assert!(
+                texts
+                    .iter()
+                    .filter(|row| row[0].contains("[BrandingText] 마법사"))
+                    .count()
+                    >= 9
+            );
             let brands = db.query(
                 "SELECT `Dialog_` FROM `Control` WHERE `Control` = 'Branding'",
                 1,
             )?;
             assert_eq!(brands.len(), 8);
             assert!(!brands.contains(&vec!["Welcome".to_string()]));
+            assert!(!brands.contains(&vec!["Cancelled".to_string()]));
+            assert!(!brands.contains(&vec!["Complete".to_string()]));
             for brand in &brands {
                 let name = &brand[0];
                 let rows = db.query(
@@ -1893,10 +2471,10 @@ mod tests {
                         < chain.iter().position(|c| c == "Branding").unwrap()
                 );
             }
-            assert_eq!(db.query("SELECT `X`,`Y`,`Width`,`Height` FROM `Control` WHERE `Dialog_` = 'License' AND `Control` = 'Branding'",4)?[0],vec!["2","234","90","12"]);
+            assert_eq!(db.query("SELECT `X`,`Y`,`Width`,`Height` FROM `Control` WHERE `Dialog_` = 'License' AND `Control` = 'Branding'",4)?[0],vec!["2".to_string(),"234".into(),msi::branding_width("Custom Setup")?.to_string(),"12".into()]);
             assert_eq!(db.query("SELECT `X`,`Y`,`Width` FROM `Control` WHERE `Dialog_` = 'License' AND `Control` = 'Line'",3)?[0],vec!["0","240","390"]);
             assert_eq!(db.query("SELECT `Attributes` FROM `Control` WHERE `Dialog_` = 'License' AND `Control` = 'Branding'",1)?[0][0],"3");
-            assert_eq!(db.query("SELECT `Dialog` FROM `Dialog`", 1)?.len(), 9);
+            assert_eq!(db.query("SELECT `Dialog` FROM `Dialog`", 1)?.len(), 13);
             assert_eq!(db.query("SELECT `Argument` FROM `ControlEvent` WHERE `Dialog_` = 'Welcome' AND `Control_` = 'Next'",1)?[0][0],"License");
             assert_eq!(db.query("SELECT `Argument` FROM `ControlEvent` WHERE `Dialog_` = 'Path' AND `Control_` = 'Back'",1)?[0][0],"License");
             assert_eq!(db.query("SELECT `Attributes` FROM `Control` WHERE `Dialog_` = 'License' AND `Control` = 'Next'",1)?[0][0],"1");
@@ -1962,7 +2540,34 @@ mod tests {
             CabStorage::Embedded,
         )?;
         let db = Database::read(&output)?;
-        let repair = db.query("SELECT `Event`,`Argument` FROM `ControlEvent` WHERE `Dialog_` = 'Maintenance' AND `Control_` = 'Proceed' AND `Condition` = 'MaintenanceChoice = \"Repair\"' ORDER BY `Ordering`",2)?;
+        let repair = db.query("SELECT `Event`,`Argument` FROM `ControlEvent` WHERE `Dialog_` = 'RepairReady' AND `Control_` = 'Proceed' AND `Condition` = 'MaintenanceChoice = \"Repair\"' ORDER BY `Ordering`",2)?;
+        let selection = db.query("SELECT `Event`,`Argument` FROM `ControlEvent` WHERE `Dialog_` = 'Maintenance' AND `Control_` = 'Proceed'", 2)?;
+        assert_eq!(selection.len(), 2);
+        for row in selection {
+            assert_eq!(row[0], "NewDialog");
+            assert!(matches!(row[1].as_str(), "RepairReady" | "RemoveReady"));
+        }
+        for name in ["RepairReady", "RemoveReady"] {
+            assert_eq!(db.query(&format!("SELECT `Argument` FROM `ControlEvent` WHERE `Dialog_` = '{name}' AND `Control_` = 'Back' AND `Event` = 'NewDialog'"), 1)?, vec![vec!["Maintenance"]]);
+            assert_eq!(db.query(&format!("SELECT `Argument` FROM `ControlEvent` WHERE `Dialog_` = '{name}' AND `Control_` = 'Cancel' AND `Event` = 'SpawnDialog'"), 1)?, vec![vec!["ConfirmCancel"]]);
+        }
+        assert!(
+            db.query(
+                "SELECT `Value` FROM `Property` WHERE `Property` = 'MaintenanceChoice'",
+                1
+            )?
+            .is_empty()
+        );
+        assert_eq!(db.query("SELECT `Control_Default`,`Control_Cancel` FROM `Dialog` WHERE `Dialog` = 'ConfirmCancel'", 2)?, vec![vec!["No", "No"]]);
+        for (button, result) in [("Yes", "Exit"), ("No", "Return")] {
+            assert_eq!(db.query(&format!("SELECT `Argument` FROM `ControlEvent` WHERE `Dialog_` = 'ConfirmCancel' AND `Control_` = '{button}' AND `Event` = 'EndDialog'"), 1)?, vec![vec![result]]);
+        }
+        for dlg in ["Welcome", "Path", "Ready", "Maintenance", "Progress"] {
+            assert_eq!(db.query(&format!("SELECT `Argument` FROM `ControlEvent` WHERE `Dialog_` = '{dlg}' AND `Control_` = 'Cancel' AND `Event` = 'SpawnDialog'"), 1)?, vec![vec!["ConfirmCancel"]]);
+            assert!(db.query(&format!("SELECT `Argument` FROM `ControlEvent` WHERE `Dialog_` = '{dlg}' AND `Control_` = 'Cancel' AND `Event` = 'EndDialog'"), 1)?.is_empty());
+        }
+        assert_eq!(db.query("SELECT `Argument` FROM `ControlEvent` WHERE `Dialog_` = 'Maintenance' AND `Control_` = 'Cancel' AND `Event` = '[EMB_CANCEL_ACTION]' ORDER BY `Ordering`", 1)?, vec![vec!["유지보수"], vec!["복구"], vec!["제거"]]);
+        assert_eq!(db.query("SELECT `Action` FROM `ControlCondition` WHERE `Dialog_` = 'Maintenance' AND `Control_` = 'Proceed'", 1)?.len(), 2);
         assert_eq!(
             repair,
             vec![
@@ -1971,14 +2576,22 @@ mod tests {
                 vec!["Reinstall", "ALL"]
             ]
         );
-        let remove = db.query("SELECT `Event`,`Argument` FROM `ControlEvent` WHERE `Dialog_` = 'Maintenance' AND `Control_` = 'Proceed' AND `Condition` = 'MaintenanceChoice = \"Remove\"' ORDER BY `Ordering`",2)?;
+        let remove = db.query("SELECT `Event`,`Argument` FROM `ControlEvent` WHERE `Dialog_` = 'RemoveReady' AND `Control_` = 'Proceed' AND `Condition` = 'MaintenanceChoice = \"Remove\"' ORDER BY `Ordering`",2)?;
         assert_eq!(
             remove,
             vec![vec!["[REINSTALL]", "{}"], vec!["[REMOVE]", "ALL"]]
         );
         assert_eq!(db.query("SELECT `Control` FROM `Control` WHERE `Dialog_` = 'Maintenance' AND `Type` = 'PushButton'",1)?.len(),2);
         assert_eq!(db.query("SELECT `Value` FROM `RadioButton` WHERE `Property` = 'MaintenanceChoice' ORDER BY `Order`",1)?,vec![vec!["Repair"],vec!["Remove"]]);
-        assert_eq!(db.query("SELECT `Text` FROM `Control` WHERE `Dialog_` = 'Maintenance' AND `Control` = 'Proceed'",1)?[0][0],"진행 >");
+        let choice = db.query("SELECT `X`,`Y`,`Width`,`Height` FROM `Control` WHERE `Dialog_` = 'Maintenance' AND `Control` = 'Choice'", 4)?;
+        let bounds: Vec<i32> = choice[0].iter().map(|v| v.parse().unwrap()).collect();
+        for row in db.query("SELECT `Control`,`X`,`Y`,`Width`,`Height` FROM `Control` WHERE `Dialog_` = 'Maintenance' AND `Type` = 'Text'", 5)? {
+            let rect: Vec<i32> = row[1..].iter().map(|v| v.parse().unwrap()).collect();
+            assert!(rect[0] >= bounds[0] + bounds[2] || rect[0] + rect[2] <= bounds[0]
+                || rect[1] >= bounds[1] + bounds[3] || rect[1] + rect[3] <= bounds[1],
+                "radio group obscures {}", row[0]);
+        }
+        assert_eq!(db.query("SELECT `Text` FROM `Control` WHERE `Dialog_` = 'Maintenance' AND `Control` = 'Proceed'",1)?[0][0],"실행(&E)");
         assert_eq!(
             db.query(
                 "SELECT `Value` FROM `Property` WHERE `Property` = 'BrandingText'",
@@ -1986,14 +2599,19 @@ mod tests {
             )?[0][0],
             "Express MSI Builder"
         );
-        assert_eq!(db.query("SELECT `Name` FROM `Binary`", 1)?.len(), 2);
+        assert_eq!(db.query("SELECT `Name` FROM `Binary`", 1)?.len(), 4);
         let art = db.query(
             "SELECT `Dialog_`,`Text`,`Width`,`Height` FROM `Control` WHERE `Type` = 'Bitmap'",
             4,
         )?;
-        assert_eq!(art.len(), 8);
+        assert_eq!(art.len(), 12);
         for row in art {
-            let expected = if row[0] == "Welcome" {
+            if row[1] == "RepairArt" || row[1] == "RemoveArt" {
+                assert_eq!(row[0], "Maintenance");
+                assert_eq!(&row[2..], ["32", "32"]);
+                continue;
+            }
+            let expected = if matches!(row[0].as_str(), "Welcome" | "Cancelled" | "Complete") {
                 ["WelcomeArt", "130", "240"]
             } else {
                 ["BannerArt", "390", "52"]
@@ -2024,7 +2642,7 @@ mod tests {
                 "SELECT `Text` FROM `Control` WHERE `Dialog_` = 'Complete' AND `Control` = 'Body'",
                 1
             )?[0][0],
-            "작업이 완료되었습니다."
+            "[BrandingText] 마법사가 [ProductName]을(를) 성공적으로 설치했습니다. 마법사를 종료하려면 \"마침\"을 눌러주세요."
         );
         assert_eq!(
             db.query(

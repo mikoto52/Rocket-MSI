@@ -116,7 +116,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         std::path::Path::new(&args[1]),
         std::path::Path::new(&args[2]),
         license_path,
-        branding.unwrap_or("Express MSI Builder"),
+        branding.unwrap_or("InstallEmbly"),
         storage.unwrap_or(package::CabStorage::Embedded),
         cab_limit,
         launch.as_ref(),

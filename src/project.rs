@@ -137,6 +137,8 @@ mod tests {
                 if arch == "x64" { "256" } else { "0" }
             );
             assert_eq!(db.query("SELECT `Attributes` FROM `Control` WHERE `Dialog_` = 'Path' AND `Control` = 'Folder'",1)?[0][0],"1");
+            assert_eq!(db.query("SELECT `Attributes` FROM `Control` WHERE `Dialog_` = 'Path' AND `Control` = 'Browse'",1)?[0][0],"1");
+            assert!(!db.query("SELECT `Text` FROM `Control` WHERE `Dialog_` = 'Path' AND `Control` = 'PathLabel'",1)?[0][0].contains("찾아보기"));
             components.push(db.query("SELECT `ComponentId` FROM `Component`", 1)?[0][0].clone());
             assert_eq!(
                 db.query(
@@ -180,7 +182,7 @@ mod tests {
                 )?[0][0],
                 policy.mode()
             );
-            assert_eq!(db.query("SELECT `Argument` FROM `ControlEvent` WHERE `Dialog_` = 'Maintenance' AND `Event` = 'ReinstallMode'",1)?[0][0],policy.mode());
+            assert_eq!(db.query("SELECT `Argument` FROM `ControlEvent` WHERE `Dialog_` = 'RepairReady' AND `Event` = 'ReinstallMode'",1)?[0][0],policy.mode());
             assert!(db.query("SELECT `Version` FROM `File`", 1)?[0][0].is_empty());
         }
         let xml =
@@ -964,7 +966,7 @@ impl Project {
             output_directory: "./dist".into(),
             output_file: "Setup.msi".into(),
             license: None,
-            branding: "Express MSI Builder".into(),
+            branding: "InstallEmbly".into(),
             storage: CabStorage::Embedded,
             cab_limit: None,
             launch: None,
@@ -1067,7 +1069,7 @@ impl Project {
             output_directory: build.attr("outputDirectory")?.into(),
             output_file: build.attr("outputFile")?.into(),
             license: None,
-            branding: "Express MSI Builder".into(),
+            branding: "InstallEmbly".into(),
             storage: CabStorage::Embedded,
             cab_limit: None,
             launch: None,
@@ -1112,7 +1114,11 @@ impl Project {
             }
             if let Some(n) = ui.optional("BrandingText")? {
                 n.check(&[], &[], true)?;
-                result.branding = n.text.clone();
+                result.branding = if n.text == "Express MSI Builder" {
+                    "InstallEmbly".into()
+                } else {
+                    n.text.clone()
+                };
             }
             if let Some(n) = ui.optional("FinishLaunch")? {
                 n.check(&["file"], &["Arguments"], false)?;

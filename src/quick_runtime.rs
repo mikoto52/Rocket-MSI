@@ -1490,12 +1490,7 @@ pub unsafe extern "system" fn InitializeEmbeddedUI(
             installed,
             action: Choice::Install,
             phase: 0,
-            status: if installed {
-                "수행할 작업을 선택해 주세요."
-            } else {
-                ""
-            }
-            .into(),
+            status: String::new(),
             result: None,
             total: 0,
             ticks: 0,
@@ -1612,10 +1607,8 @@ pub extern "system" fn ShutdownEmbeddedUI() -> u32 {
         {
             let mut m = s.model.lock().unwrap();
             m.phase = 2;
-            let action = m.action.label();
             m.status = match m.result {
-                Some(0 | 3010 | 1641) => format!("{}을(를) 성공적으로 {action}했습니다.", m.name),
-                Some(1602) => "작업이 취소되었습니다.".into(),
+                Some(0 | 3010 | 1641 | 1602) => String::new(),
                 Some(code) => format!("작업이 완료되지 않았습니다. MSI 결과: {code}"),
                 None => "작업이 종료되었습니다. 결과는 MSI 로그를 확인해주세요.".into(),
             };

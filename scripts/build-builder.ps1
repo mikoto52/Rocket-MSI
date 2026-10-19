@@ -22,6 +22,7 @@ try {
         if($files.Count){$target=Join-Path $output "licenses/$($package.name)-$($package.version)";[IO.Directory]::CreateDirectory($target)|Out-Null;foreach($file in $files){Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $target $file.Name)}}
     }
     Copy-Item -LiteralPath (Join-Path $root 'builder/THIRD-PARTY-NOTICES.md') -Destination (Join-Path $output 'THIRD-PARTY-NOTICES.md')
+    Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $output 'LICENSE')
     Write-Host "GUI ready: $output/RocketMsiBuilder.exe"
     Write-Host "CLI ready: $output/RocketMsiBuilderCli.exe"
 }finally{Pop-Location}

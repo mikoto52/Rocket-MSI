@@ -1,7 +1,8 @@
 [package]
 name = "install-embly-builder"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2024"
+license = "MIT"
 publish = false
 
 [dependencies]

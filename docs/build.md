@@ -56,6 +56,7 @@ powershell -NoProfile -File scripts/build-builder.ps1
 | `dist/builder/RocketMsiBuilderCli.exe` | `.embproj` 빌드용 콘솔 도구 |
 | `dist/builder/dependencies.json` | 의존성 버전·라이선스 목록 |
 | `dist/builder/THIRD-PARTY-NOTICES.md` | 외부 의존성 안내 |
+| `dist/builder/LICENSE` | Rocket MSI의 MIT 라이선스 |
 | `dist/builder/licenses/` | 의존성 라이선스·고지 파일 |
 
 배포할 때는 라이선스·고지 파일도 함께 포함합니다. Windows의 makecab이나 WebView2를 이 스크립트에서 복사·설치하지는 않습니다. GUI 자체의 설치용 MSI/Setup.exe는 아직 만들지 않습니다.
@@ -154,4 +155,4 @@ powershell -NoProfile -File scripts/build-builder.ps1
 | MSI/CAB 출력이 이미 존재함 | embproj의 출력 폴더/파일명을 새 위치로 변경 |
 | 탐색기에 이전 아이콘이 보임 | 실행 파일을 다시 열고 탐색기 아이콘 캐시 표시와 실제 리소스를 구분 |
 
-프로젝트 자체의 라이선스는 아직 선정 전이며, 의존성 안내는 [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md)를 참고하세요.
+프로젝트 자체는 [MIT 라이선스](../LICENSE)로 배포하며, 의존성 안내는 [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md)를 참고하세요.

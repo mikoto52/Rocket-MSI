@@ -2,7 +2,7 @@
 
 Rocket MSI는 Windows Installer 패키지(`.msi`)를 만드는 **Windows 전용 설치 빌더**입니다. Rust로 구현한 자체 MSI 엔진과 Tauri 2 기반 GUI를 사용하며, WiX에 의존하지 않습니다. 프로젝트는 XML 기반 **`.embproj`** 파일로 저장합니다.
 
-현재는 기능 구현과 검증을 진행하는 개발 버전입니다.
+현재 버전은 **0.2.1**이며 기능 구현과 검증을 진행하는 개발 버전입니다. 프로젝트 소스코드는 **MIT 라이선스**로 배포합니다.
 
 ## 주요 기능
 
@@ -121,7 +121,7 @@ powershell -NoProfile -File scripts/test-builder-cli.ps1
 
 ## 배포 및 라이선스
 
-Rocket MSI는 무료 배포와 소스 공개를 목표로 개발합니다. 프로젝트 자체의 소스코드 라이선스는 아직 선정하지 않았습니다. 외부 의존성의 라이선스 안내는 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)와 [빌더 의존성 안내](builder/THIRD-PARTY-NOTICES.md)를 참고하세요.
+Rocket MSI는 무료 배포와 소스 공개를 목표로 개발합니다. 프로젝트 소스코드는 [MIT 라이선스](LICENSE)로 배포합니다. 외부 의존성의 라이선스 안내는 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)와 [빌더 의존성 안내](builder/THIRD-PARTY-NOTICES.md)를 참고하세요.
 
 ## 관련 문서
 

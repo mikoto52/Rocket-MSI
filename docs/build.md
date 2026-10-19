@@ -1,5 +1,7 @@
 # Rocket MSI 빌드 안내
 
+정식 표시 이름과 기본 브랜딩은 Rocket MSI다. 저장소 주소 `mikoto52/InstallEmbly`, 내부 Cargo 패키지명 `install-embly-builder`, `.embproj` 형식은 현재 유지한다. 아래 복제 경로와 내부 실행 파일명을 정식 이름으로 임의 변경하지 않는다. 배포 파일명은 `RocketMsiBuilder.exe`와 `RocketMsiBuilderCli.exe`다.
+
 이 문서는 Windows에서 소스를 준비하고 GUI·CLI 실행 파일을 만드는 방법을 설명합니다. 빌드 스크립트는 실행 파일을 생성하며 프로그램 설치나 MSI 설치는 실행하지 않습니다.
 
 ## 1. 개발 환경

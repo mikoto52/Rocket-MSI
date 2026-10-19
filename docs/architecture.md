@@ -52,7 +52,7 @@ UI는 MSI XML을 직접 생성하지 않는다. 도메인 검증과 변수 파�
 
 ## 5. 프로젝트 저장 형식 초안
 
-프로그램의 공식 이름은 **Express MSI Builder**이며 프로젝트 파일은 XML 기반 **`.embproj`** 형식이다. 현재 구현된 구조는 [v1 명세](embproj-v1.md)를 기준으로 한다. 아래 확장 설계에는 미구현 항목이 포함된다.
+프로그램의 공식 이름은 **Rocket MSI**이며 프로젝트 파일은 XML 기반 **`.embproj`** 형식이다. 현재 구현된 구조는 [v1 명세](embproj-v1.md)를 기준으로 한다. 아래 확장 설계에는 미구현 항목이 포함된다.
 
 실제 XML 예제는 [MyApp.embproj](../examples/MyApp.embproj)에 둔다. 최상위 요소는 `ExpressMsiBuilderProject`이며 `schemaVersion="1"`로 형식 버전을 구분한다.
 

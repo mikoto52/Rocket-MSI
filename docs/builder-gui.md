@@ -1,4 +1,6 @@
-# Tauri 빌더 첫 구현
+# Rocket MSI 빌더 사용 안내
+
+기본 브랜딩은 Rocket MSI이며 설치 화면 설정에서 변경한다. 같은 문구가 하단과 마법사 이름에 반영된다. 설치 UI의 최신 흐름과 유지보수 확인 단계는 [설치 UI 안내](installer-ui.md)를 따른다. Quick MSI는 아직 제공하지 않는다.
 
 앱 아이콘은 `assets/installer`의 기존 큐브 도형을 사용한다. 같은 생성 함수를 공유해 GUI/CLI EXE 아이콘, 창/작업 표시줄 아이콘, 화면의 로고와 패키지 아이콘을 통일했다. PNG는 투명 배경이고 ICO는 16~256픽셀 여러 크기를 포함한다. `scripts/generate-app-icon.ps1`로 다시 생성한다.
 

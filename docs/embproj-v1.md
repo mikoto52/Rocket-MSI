@@ -14,7 +14,7 @@ init은 새 ProductCode·UpgradeCode를 파일에 저장한다. 기본 소스는
 | 요소 | 속성 및 내용 |
 |---|---|
 | Product (필수) | name, manufacturer, version, productCode, upgradeCode, architecture=x86/x64, scope=perMachine |
-| Source (필수) | directory: 재귀 포함할 폴더 |
+| Source 또는 Files | 기존 Source의 directory 또는 선택한 파일 목록. GUI는 Files로 개별 원본·대상 경로를 저장하며 기존 Source 프로젝트도 읽음 |
 | Installation (필수) | directory, allowDirectoryChange=true/false, existingFiles=default/skip/overwrite (선택) |
 | Registry (선택) | Entry 반복: REG_SZ, REG_DWORD, REG_BINARY, REG_MULTI_SZ. [명세 및 시험](registry-test.md) |
 | Shortcuts (선택) | Shortcut 반복: 시작 메뉴/바탕화면, 대상 파일·인수·작업 폴더. [명세 및 시험](shortcut-test.md) |
@@ -22,7 +22,7 @@ init은 새 ProductCode·UpgradeCode를 파일에 저장한다. 기본 소스는
 | Upgrade (선택) | enabled=true/false. [현재 제한과 시험](upgrade-test.md). 새 프로젝트는 true, 요소 생략 시 false |
 | UI (선택) | License, BrandingText, FinishLaunch |
 | UI/License | file: UTF-8 TXT 또는 RTF |
-| UI/BrandingText | 한 줄 텍스트. 기본 Express MSI Builder |
+| UI/BrandingText | 한 줄 텍스트. 기본 Rocket MSI. 전체 마법사 문구와 하단에 사용; 이전 기본값은 자동 변환 |
 | UI/FinishLaunch | file: 소스 내부 상대 EXE 경로 |
 | FinishLaunch/Arguments | Argument 요소를 순서대로 반복. 요소 하나가 인수 하나 |
 | Build (필수) | outputDirectory, outputFile: 경로 없는 .msi 파일명 |

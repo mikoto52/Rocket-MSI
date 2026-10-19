@@ -10,8 +10,8 @@ Rocket MSI는 Windows Installer 패키지(`.msi`)를 만드는 **Windows 전용 
 |---|---|
 | 제품 설정 | 제품명·제작사·버전, x86/x64, ProductCode·UpgradeCode 관리 |
 | 설치 파일 | 펼치기/접기 트리, 파일 다중 선택, 디렉터리 전체 가져오기, 대상 폴더별 배치·이동·삭제 |
-| 설치 화면 | 한글 마법사, 환영/상단 이미지, BrandingText, TXT/RTF 이용약관 동의 |
-| 유지보수 | 복구·제거 선택 화면, 기존 파일의 MSI 기본 규칙·건너뛰기·덮어쓰기 정책 |
+| 설치 화면 | 한글 마법사, 환영·완료·중단의 좌측 이미지, 배너 화면, 전체 문구 BrandingText, TXT/RTF 사용권 계약 동의 |
+| 유지보수 | 아이콘이 있는 복구·제거 선택과 작업별 확인 페이지, 기존 파일의 MSI 기본 규칙·건너뛰기·덮어쓰기 정책 |
 | 레지스트리 | HKLM·HKCU·HKCR, 32/64비트 영역, REG_SZ·REG_DWORD·REG_BINARY·REG_MULTI_SZ, 키 트리/값 목록 |
 | 바로가기 | 시작 메뉴·바탕화면, 설치된 대상 파일, 인수·작업 폴더·경로 변수 |
 | 프로그램 실행 | 설치·제거 중 여러 명령, 실행 시점·인수·작업 폴더·창 숨김·시간 제한, 실패 시 무시/알림/중단 |
@@ -44,6 +44,8 @@ GUI에는 **Microsoft Edge WebView2 Runtime**이 필요합니다. CLI에는 WebV
 디렉터리 가져오기는 현재 하위 파일 목록을 고정하므로 이후 원본에 추가한 파일은 다시 넣어야 합니다. 목록에서 삭제해도 원본 파일은 삭제하지 않습니다. 기존 `<Source directory="..."/>` 프로젝트도 읽고 빌드할 수 있습니다.
 
 상세 사용법은 [빌더 안내](docs/builder-gui.md)를 참고하세요.
+
+브랜딩 기본값은 **Rocket MSI**입니다. 설정한 문구는 하단뿐 아니라 환영·진행·완료·중단 화면의 마법사 이름에도 적용됩니다. 하단 텍스트박스는 빌드 시 실제 글자 폭과 여유 폭을 반영해 자동 조정합니다. 화면 흐름과 버튼 표기는 [설치 UI 안내](docs/installer-ui.md)를 참고하세요.
 
 ## CLI 사용
 
@@ -108,6 +110,7 @@ powershell -NoProfile -File scripts/test-builder-cli.ps1
 
 ## 현재 제한과 후속 작업
 
+- **Quick MSI**는 Embedded UI DLL을 MSI에 포함하는 간편 설치 화면으로 계획 중입니다. 현재 구현·선택 옵션은 없으며, 기존 마법사 방식의 검증을 마친 다음 진행합니다. [후속 계획](docs/development-plan.md#quick-msi-후속-계획)
 - 현재 설치 범위는 모든 사용자(`perMachine`)입니다. 빌더는 MSI를 생성하며 설치 권한 상승을 처리하는 Setup.exe 부트스트래퍼는 후속 과제입니다.
 - 일부 덮어쓰기 복구 시험에서 일반 권한 실행의 롤백 정리 오류가 남아 있습니다. 관리자 실행은 통과했으며 [기록](docs/development-plan.md)을 참고하세요.
 - 업그레이드는 같은 UpgradeCode, 아키텍처와 설치 경로 구성의 제품을 대상으로 합니다. 새 버전에는 버전 증가와 새 ProductCode가 필요합니다. 설치 위치를 옮기는 업그레이드는 지원하지 않습니다.
@@ -125,6 +128,7 @@ Rocket MSI는 무료 배포와 소스 공개를 목표로 개발합니다. 프�
 - [빌더 사용 안내](docs/builder-gui.md)
 - [프로젝트 XML 형식](docs/embproj-v1.md)
 - [약관·브랜딩](docs/license-and-branding.md)
+- [설치 UI와 유지보수 흐름](docs/installer-ui.md)
 - [변수·레지스트리](docs/variables-and-registry.md) / [레지스트리 시험](docs/registry-test.md)
 - [바로가기 시험](docs/shortcut-test.md)
 - [설치·제거 실행](docs/program-actions.md) / [실행 시험](docs/actions-test.md)

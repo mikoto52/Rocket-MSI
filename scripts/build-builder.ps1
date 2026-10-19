@@ -3,11 +3,14 @@ $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 Push-Location $root
 try {
+    & cargo build --release --offline
+    if($LASTEXITCODE -ne 0){throw 'CLI build failed'}
     & cargo build --manifest-path builder/Cargo.toml --release --offline
     if($LASTEXITCODE -ne 0){throw 'Tauri build failed'}
     $output=Join-Path $root 'dist/builder'
     [IO.Directory]::CreateDirectory($output)|Out-Null
-    Copy-Item -LiteralPath (Join-Path $root 'builder/target/release/install-embly-builder.exe') -Destination (Join-Path $output 'ExpressMsiBuilder.exe')
+    Copy-Item -LiteralPath (Join-Path $root 'builder/target/release/install-embly-builder.exe') -Destination (Join-Path $output 'InstallEmblyBuilder.exe')
+    Copy-Item -LiteralPath (Join-Path $root 'target/release/emb-msi.exe') -Destination (Join-Path $output 'InstallEmblyBuilderCli.exe')
     $metadata=& cargo metadata --manifest-path builder/Cargo.toml --format-version 1 --offline --locked --filter-platform x86_64-pc-windows-msvc | ConvertFrom-Json
     if($LASTEXITCODE -ne 0){throw 'Dependency metadata failed'}
     $packages=@($metadata.packages|Where-Object{$_.source}|Sort-Object name,version)
@@ -19,5 +22,6 @@ try {
         if($files.Count){$target=Join-Path $output "licenses/$($package.name)-$($package.version)";[IO.Directory]::CreateDirectory($target)|Out-Null;foreach($file in $files){Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $target $file.Name)}}
     }
     Copy-Item -LiteralPath (Join-Path $root 'builder/THIRD-PARTY-NOTICES.md') -Destination (Join-Path $output 'THIRD-PARTY-NOTICES.md')
-    Write-Host "Builder ready: $output/ExpressMsiBuilder.exe"
+    Write-Host "GUI ready: $output/InstallEmblyBuilder.exe"
+    Write-Host "CLI ready: $output/InstallEmblyBuilderCli.exe"
 }finally{Pop-Location}

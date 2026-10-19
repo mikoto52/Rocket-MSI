@@ -29,6 +29,7 @@ pub struct Entry {
     pub hide: bool,
     pub policy: String,
     pub timeout: u64,
+    pub timing: String,
 }
 impl Actions {
     pub fn any(&self) -> bool {
@@ -44,6 +45,24 @@ impl Actions {
             }
             let mut ids = BTreeSet::new();
             for e in entries {
+                let install = std::ptr::eq(entries, &self.install);
+                if !(if install {
+                    ["beforeInstall", "beforeFiles", "afterFiles", "beforeFinish"]
+                        .contains(&e.timing.as_str())
+                } else {
+                    e.timing == "beforeRemove"
+                }) {
+                    return Err("invalid action timing for phase".into());
+                }
+                if install
+                    && ["beforeInstall", "beforeFiles"].contains(&e.timing.as_str())
+                    && e.kind == "installedFile"
+                {
+                    return Err(
+                        "before file copy, use targetPath for a program already on the target PC"
+                            .into(),
+                    );
+                }
                 if e.id.is_empty()
                     || e.id.len() > 60
                     || !e.id.bytes().enumerate().all(|(i, b)| {
@@ -117,10 +136,13 @@ fn relative(path: &Path) -> bool {
 fn absolute_template(s: &str) -> bool {
     Path::new(s).is_absolute()
         || [
-            "{InstallDir}",
+            "{InstallDestination}",
             "{ProgramFiles}",
             "{ProgramData}",
             "{WindowsDir}",
+            "{SystemDir}",
+            "{SystemDrive}",
+            "{TempDir}",
         ]
         .iter()
         .any(|v| s.starts_with(v))
@@ -129,7 +151,7 @@ fn executable(e: &Entry, p: &Product, files: &[payload::File]) -> Result<String>
     if e.kind == "targetPath" {
         return registry::template(&e.path, p, true);
     }
-    let key = payload::key(Path::new(&e.path))?;
+    let key = payload::key(&payload::target_path(&e.path))?;
     let file = files
         .iter()
         .find(|f| payload::key(&f.relative).is_ok_and(|s| s == key))
@@ -199,7 +221,22 @@ pub fn author(db: &Database, p: &Product, files: &[payload::File], work: &Path) 
             "Installed AND REMOVE ~= \"ALL\" AND NOT UPGRADINGPRODUCTCODE",
         ),
     ] {
-        for (index, e) in entries.iter().filter(|e| e.enabled).enumerate() {
+        let mut slots = std::collections::BTreeMap::new();
+        for e in entries.iter().filter(|e| e.enabled) {
+            let base = match e.timing.as_str() {
+                "beforeInstall" => 1610,
+                "beforeFiles" => 3600,
+                "afterFiles" => 4100,
+                "beforeFinish" => 5600,
+                _ => base,
+            };
+            let index = slots.entry(base).or_insert(0);
+            let mut sequence = base + *index * 3;
+            // Keep the three action rows clear of UnpublishFeatures (1800).
+            if base == 1610 && sequence + 2 >= 1800 {
+                sequence += 3;
+            }
+            *index += 1;
             let id = format!(
                 "EMB_{}_{}",
                 if phase == "Install" { "I" } else { "U" },
@@ -224,11 +261,7 @@ pub fn author(db: &Database, p: &Product, files: &[payload::File], work: &Path) 
                 db.insert(
                     "InstallExecuteSequence",
                     &["Action", "Condition", "Sequence"],
-                    &[
-                        T(action),
-                        T(condition),
-                        I(base + index as i32 * 3 + offset as i32),
-                    ],
+                    &[T(action), T(condition), I(sequence + offset as i32)],
                 )?;
             }
         }

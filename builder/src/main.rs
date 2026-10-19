@@ -38,7 +38,8 @@ fn idle(s: &AppState) -> Result<(), String> {
 #[tauri::command]
 fn new_project(state: State<AppState>) -> Result<Draft, String> {
     idle(&state)?;
-    let p = Project::new().map_err(|e| e.to_string())?;
+    let mut p = Project::new().map_err(|e| e.to_string())?;
+    p.files = Some(Vec::new());
     *state.document.lock().unwrap() = None;
     Ok(Draft {
         xml: xml(&p)?,
@@ -56,10 +57,10 @@ async fn open_project(state: State<'_, AppState>) -> Result<Option<Draft>, Strin
     .await
     .map_err(|e| e.to_string())?;
     let Some(path) = path else { return Ok(None) };
-    Project::load(&path).map_err(|e| e.to_string())?;
+    let p = Project::load(&path).map_err(|e| e.to_string())?;
     let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let result = Draft {
-        xml: text.clone(),
+        xml: xml(&p)?,
         path: Some(path.display().to_string()),
     };
     *state.document.lock().unwrap() = Some(Document { path, text });
@@ -76,6 +77,83 @@ async fn pick_path(kind: String) -> Result<Option<String>, String> {
             _ => return Err("지원하지 않는 선택 항목입니다.".into()),
         };
         Ok(result.map(|p| p.display().to_string()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[derive(Serialize)]
+struct PayloadItem {
+    source: String,
+    target: String,
+}
+fn payload_items(folder: &Path, prefix: &Path) -> Result<Vec<PayloadItem>, String> {
+    let files = emb_msi::payload::collect(folder, Path::new("")).map_err(|e| e.to_string())?;
+    Ok(files
+        .into_iter()
+        .map(|f| PayloadItem {
+            source: f.source.display().to_string(),
+            target: prefix.join(f.relative).display().to_string(),
+        })
+        .collect())
+}
+#[tauri::command]
+async fn pick_payload(kind: String) -> Result<Vec<PayloadItem>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if kind == "directory" {
+            let Some(folder) = rfd::FileDialog::new().pick_folder() else {
+                return Ok(Vec::new());
+            };
+            payload_items(
+                &folder,
+                Path::new(
+                    folder
+                        .file_name()
+                        .ok_or("드라이브 대신 폴더를 선택하세요.")?,
+                ),
+            )
+        } else if kind == "files" {
+            let files = rfd::FileDialog::new().pick_files().unwrap_or_default();
+            Ok(files
+                .into_iter()
+                .map(|p| PayloadItem {
+                    target: p.file_name().unwrap().to_string_lossy().into_owned(),
+                    source: p.display().to_string(),
+                })
+                .collect())
+        } else {
+            Err("지원하지 않는 항목입니다.".into())
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn inspect_payload(
+    xml_text: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<PayloadItem>, String> {
+    let base = state
+        .document
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|d| d.path.parent().map(Path::to_owned));
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = Project::parse(&xml_text).map_err(|e| e.to_string())?;
+        if let Some(files) = p.files {
+            return Ok(files
+                .into_iter()
+                .map(|(source, target)| PayloadItem { source, target })
+                .collect());
+        }
+        let source = PathBuf::from(&p.source);
+        let source = if source.is_absolute() {
+            source
+        } else {
+            base.ok_or("기존 원본 폴더를 읽으려면 프로젝트를 먼저 저장하세요.")?
+                .join(source)
+        };
+        payload_items(&source, Path::new(""))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -150,6 +228,11 @@ async fn save_project(
     {
         let base = old_path.parent().unwrap();
         p.source = base.join(&p.source).display().to_string();
+        if let Some(files) = &mut p.files {
+            for (source, _) in files {
+                *source = base.join(&*source).display().to_string();
+            }
+        }
         p.output_directory = base.join(&p.output_directory).display().to_string();
         p.license = p
             .license
@@ -263,6 +346,8 @@ fn main() {
             new_project,
             open_project,
             pick_path,
+            pick_payload,
+            inspect_payload,
             generate_guid,
             save_project,
             validate_project,
@@ -276,6 +361,28 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn directory_import_keeps_nested_names_and_sources() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("import-test-{}", msi::guid().unwrap()));
+        fs::create_dir_all(root.join("nested")).unwrap();
+        fs::write(root.join("one.txt"), "one").unwrap();
+        fs::write(root.join("nested/two.txt"), "two").unwrap();
+        let items = payload_items(&root, Path::new("Imported")).unwrap();
+        assert_eq!(items.len(), 2);
+        assert!(
+            items
+                .iter()
+                .any(|f| f.target == "Imported\\one.txt" && Path::new(&f.source).is_file())
+        );
+        assert!(
+            items
+                .iter()
+                .any(|f| f.target == "Imported\\nested\\two.txt" && Path::new(&f.source).is_file())
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn save_protects_external_changes_and_replaces_known_document() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

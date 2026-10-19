@@ -2,6 +2,7 @@ use crate::{msi::Result, payload::File};
 use std::{
     fs,
     ops::Range,
+    os::windows::process::CommandExt,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -60,6 +61,7 @@ pub fn create(
         }
         fs::write(work.join("payload.ddf"), ddf)?;
         let output = Command::new(&makecab)
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW for GUI and CLI builds.
             .current_dir(work)
             .args(["/f", "payload.ddf"])
             .output()?;

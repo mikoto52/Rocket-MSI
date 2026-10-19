@@ -11,7 +11,20 @@ fn main() {
 
 #[cfg(windows)]
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    let mut args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.is_empty() || (args.len() == 1 && (args[0] == "--help" || args[0] == "-h")) {
+        println!(
+            "InstallEmblyBuilderCli\n\nUsage:\n  InstallEmblyBuilderCli.exe build <project.embproj>\n  InstallEmblyBuilderCli.exe <project.embproj>\n  InstallEmblyBuilderCli.exe validate <project.embproj>\n  InstallEmblyBuilderCli.exe init <new-project.embproj>\n  InstallEmblyBuilderCli.exe normalize <project.embproj> <new.embproj>\n  InstallEmblyBuilderCli.exe verify <package.msi>\n\nBuilds MSI without installing it. Relative paths are based on the project file.\nExit code: 0 on success, 1 on error. Existing output files are not overwritten."
+        );
+        return Ok(());
+    }
+    if args.len() == 1
+        && std::path::Path::new(&args[0])
+            .extension()
+            .is_some_and(|s| s.eq_ignore_ascii_case("embproj"))
+    {
+        args.insert(0, "build".into());
+    }
     if args.len() == 2 && args[0] == "init" {
         project::Project::new()?.save_new(std::path::Path::new(&args[1]))?;
         println!(
@@ -42,7 +55,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args.len() < 3 || args[0] != "build" {
         return Err(
-            "Usage: emb-msi init <project.embproj> | validate <project.embproj> | normalize <project.embproj> <new.embproj> | build <project.embproj> | build <source-file-or-folder> <output.msi> [--license <terms.txt|terms.rtf>] [--branding-text <text>] [--cab-storage embedded|external] [--cab-size-mib 1..2047] [--launch-file <relative.exe>] [--launch-arg <value>]... | verify <package.msi>".into(),
+            "Usage: InstallEmblyBuilderCli.exe init <project.embproj> | validate <project.embproj> | normalize <project.embproj> <new.embproj> | build <project.embproj> | build <source-file-or-folder> <output.msi> [--license <terms.txt|terms.rtf>] [--branding-text <text>] [--cab-storage embedded|external] [--cab-size-mib 1..2047] [--launch-file <relative.exe>] [--launch-arg <value>]... | verify <package.msi>".into(),
         );
     }
     let mut license_path = None;

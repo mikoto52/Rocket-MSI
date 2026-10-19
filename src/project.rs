@@ -15,6 +15,7 @@ use xml::reader::{EventReader, XmlEvent};
 pub struct Project {
     pub product: Product,
     pub source: String,
+    pub files: Option<Vec<(String, String)>>,
     pub output_directory: String,
     pub output_file: String,
     pub license: Option<String>,
@@ -449,7 +450,7 @@ mod tests {
             assert!(setters.iter().any(|r| r[3].contains("\u{1f}notify\u{1f}")));
             assert!(setters.iter().any(|r| r[3].contains("\u{1f}stop\u{1f}")));
             let install=db.query("SELECT `Action`,`Condition`,`Sequence` FROM `InstallExecuteSequence` WHERE `Action` = 'EMB_I_first'",3)?;
-            assert_eq!(install[0][2], "5201");
+            assert_eq!(install[0][2], "4101");
             assert!(install[0][1].contains("NOT Installed"));
             let uninstall=db.query("SELECT `Condition`,`Sequence` FROM `InstallExecuteSequence` WHERE `Action` = 'EMB_U_first'",2)?;
             assert_eq!(uninstall[0][1], "2001");
@@ -474,7 +475,10 @@ mod tests {
             xml.replace("failurePolicy=\"ignore\"", "failurePolicy=\"continue\""),
             xml.replace("hideWindow=\"true\"", "hideWindow=\"yes\""),
             xml.replace("path=\"ActionProbe.exe\"", "path=\"../outside.exe\""),
-            xml.replace("path=\"{InstallDir}\\Missing.exe\"", "path=\"Missing.exe\""),
+            xml.replace(
+                "path=\"{InstallDestination}\\Missing.exe\"",
+                "path=\"Missing.exe\"",
+            ),
             xml.replace("id=\"first\"", "id=\"first\" timeoutSeconds=\"0\""),
             xml.replace("id=\"first\"", "id=\"first\" runOnUpgrade=\"true\""),
             xml.replace("{ProgramData}", "{Unknown}"),
@@ -548,6 +552,231 @@ mod tests {
         assert_eq!(ids[0], ids[1]);
         Ok(())
     }
+    #[test]
+    fn selected_payload_roots_hkcr_and_action_timings_build_real_msi() -> Result<()> {
+        let t = temp()?;
+        fs::write(t.0.join("probe.exe"), b"not executed")?;
+        for arch in ["x86", "x64"] {
+            let mut p = Project::new()?;
+            p.product.architecture = arch.into();
+            p.files = Some(
+                [
+                    "InstallDestination",
+                    "ProgramFiles",
+                    "SystemDir",
+                    "SystemDrive",
+                    "TempDir",
+                    "ProgramData",
+                    "WindowsDir",
+                ]
+                .iter()
+                .map(|root| ("probe.exe".into(), format!("{{{root}}}\\probe.exe")))
+                .collect(),
+            );
+            p.output_directory = format!("out-{arch}");
+            p.product.registry.push(crate::registry::Entry {
+                id: "Classes".into(),
+                root: "HKCR".into(),
+                key: "InstallEmbly.Test".into(),
+                name: "".into(),
+                kind: "REG_SZ".into(),
+                view: "auto".into(),
+                text: "{InstallDestination}\\probe.exe".into(),
+                strings: vec![],
+            });
+            for (i, (_, target)) in p.files.as_ref().unwrap().iter().enumerate() {
+                p.product.shortcuts.push(crate::shortcut::Entry {
+                    id: format!("variable{i}"),
+                    location: "desktop".into(),
+                    name: format!("Target {i}"),
+                    target: target.into(),
+                    arguments: vec![],
+                    working_directory: ".".into(),
+                    description: "".into(),
+                });
+            }
+            p.files
+                .as_mut()
+                .unwrap()
+                .push(("probe.exe".into(), "{InstallDestination}\\MyApp.exe".into()));
+            p.product.shortcuts.push(crate::shortcut::Entry {
+                id: "productVariable".into(),
+                location: "desktop".into(),
+                name: "Product variable".into(),
+                target: "{InstallDestination}\\{ProductName}.exe".into(),
+                arguments: vec![],
+                working_directory: ".".into(),
+                description: "".into(),
+            });
+            for (i, timing) in ["beforeFinish", "afterFiles", "beforeFiles", "beforeInstall"]
+                .iter()
+                .enumerate()
+            {
+                p.product.actions.install.push(crate::actions::Entry {
+                    id: format!("action{i}"),
+                    name: timing.to_string(),
+                    enabled: true,
+                    kind: "targetPath".into(),
+                    path: "{SystemDir}\\cmd.exe".into(),
+                    arguments: vec!["{InstallDestination}".into()],
+                    directory: "{TempDir}".into(),
+                    hide: true,
+                    policy: "stop".into(),
+                    timeout: 5,
+                    timing: timing.to_string(),
+                });
+            }
+            let bytes = p.xml()?;
+            let q = Project::parse(std::str::from_utf8(&bytes)?)?;
+            assert_eq!(q.xml()?, bytes);
+            let path = t.0.join(format!("{arch}.embproj"));
+            q.save_new(&path)?;
+            let output = q.build(&path)?;
+            msi::verify_directory_costing(&output)?;
+            let db = msi::Database::read(&output)?;
+            let files = crate::payload::selected(q.files.as_ref().unwrap(), &t.0)?;
+            for (i, file) in files
+                .iter()
+                .filter(|f| f.relative.file_name().is_some_and(|n| n == "probe.exe"))
+                .enumerate()
+            {
+                let _ = i;
+                assert!(
+                    db.query("SELECT `Target` FROM `Shortcut`", 1)?
+                        .iter()
+                        .any(|row| row[0] == format!("[#{}]", file.id))
+                );
+            }
+            let product_file = files
+                .iter()
+                .find(|f| f.relative == Path::new("MyApp.exe"))
+                .unwrap();
+            assert_eq!(
+                db.query(
+                    "SELECT `Target` FROM `Shortcut` WHERE `Shortcut` = 'S_productVariable'",
+                    1
+                )?[0][0],
+                format!("[#{}]", product_file.id)
+            );
+            let dirs = db.query(
+                "SELECT `Directory_` FROM `Component` WHERE `Component` <> 'EMB_State'",
+                1,
+            )?;
+            for root in [
+                "INSTALLDIR",
+                if arch == "x64" {
+                    "ProgramFiles64Folder"
+                } else {
+                    "ProgramFilesFolder"
+                },
+                if arch == "x64" {
+                    "System64Folder"
+                } else {
+                    "SystemFolder"
+                },
+                "EMB_SYSTEMDRIVE",
+                "TempFolder",
+                "CommonAppDataFolder",
+                "WindowsFolder",
+            ] {
+                assert!(dirs.iter().any(|row| row[0] == root), "missing {root}");
+            }
+            assert_eq!(
+                db.query(
+                    "SELECT `Root`,`Value` FROM `Registry` WHERE `Key` = 'InstallEmbly.Test'",
+                    2
+                )?[0],
+                vec!["0".to_string(), "[INSTALLDIR]probe.exe".to_string()]
+            );
+            for (i, seq) in [(0, 5601), (1, 4101), (2, 3601), (3, 1611)] {
+                assert_eq!(db.query(&format!("SELECT `Sequence` FROM `InstallExecuteSequence` WHERE `Action` = 'EMB_I_action{i}'"),1)?[0][0],seq.to_string());
+            }
+            assert_eq!(
+                db.query(
+                    "SELECT `Target` FROM `CustomAction` WHERE `Action` = 'EmbSetSystemDrive'",
+                    1
+                )?[0][0],
+                "[WindowsVolume]"
+            );
+        }
+        Ok(())
+    }
+    #[test]
+    fn selection_rejects_traversal_alias_collisions_and_file_directory_conflicts() -> Result<()> {
+        for targets in [
+            vec!["..\\a"],
+            vec!["{Unknown}\\a"],
+            vec!["C:\\a"],
+            vec!["a\\.\\b"],
+            vec!["a\\\\b"],
+            vec!["{InstallDestination}\\a", "A"],
+            vec!["bin", "bin\\a"],
+            vec!["{TempDir}\\a", "{TempDir}\\A"],
+        ] {
+            let mut p = Project::new()?;
+            p.files = Some(
+                targets
+                    .into_iter()
+                    .map(|s| ("source.exe".into(), s.into()))
+                    .collect(),
+            );
+            assert!(p.xml().is_err());
+        }
+        let mut p = Project::new()?;
+        p.product.actions.install.push(crate::actions::Entry {
+            id: "early".into(),
+            name: "early".into(),
+            enabled: true,
+            kind: "installedFile".into(),
+            path: "probe.exe".into(),
+            arguments: vec![],
+            directory: "".into(),
+            hide: true,
+            policy: "stop".into(),
+            timeout: 0,
+            timing: "beforeFiles".into(),
+        });
+        assert!(p.xml().is_err());
+        let t = temp()?;
+        fs::write(t.0.join("source.exe"), "test")?;
+        let p = Project::new()?;
+        let entries = vec![
+            ("source.exe".into(), "same.exe".into()),
+            (
+                "source.exe".into(),
+                format!(
+                    "{{ProgramFiles}}\\{}\\same.exe",
+                    p.product.install_parts()?.join("\\")
+                ),
+            ),
+        ];
+        let mut files = crate::payload::selected(&entries, &t.0)?;
+        assert!(crate::payload::namespace(&mut files, &p.product).is_err());
+        Ok(())
+    }
+    #[test]
+    fn retired_install_variable_is_migrated_without_changing_literal_braces() -> Result<()> {
+        assert_eq!(
+            canonical_variables("{InstallDir}\\a"),
+            "{InstallDestination}\\a"
+        );
+        assert_eq!(canonical_variables("{{InstallDir}}"), "{{InstallDir}}");
+        assert_eq!(
+            canonical_variables("{{{InstallDir}}}"),
+            "{{{InstallDestination}}}"
+        );
+        let mut p = Project::new()?;
+        p.files = Some(vec![(
+            "payload/a.exe".into(),
+            "{InstallDestination}\\a.exe".into(),
+        )]);
+        let xml = String::from_utf8(p.xml()?)?.replace("{InstallDestination}", "{InstallDir}");
+        let loaded = Project::parse(&xml)?;
+        assert_eq!(loaded.files.unwrap()[0].1, "{InstallDestination}\\a.exe");
+        assert!(crate::payload::root_directory("{InstallDir}", true).is_none());
+        assert!(crate::registry::template("{InstallDir}", &p.product, true).is_err());
+        Ok(())
+    }
 }
 #[derive(Default)]
 struct Node {
@@ -556,6 +785,48 @@ struct Node {
     children: Vec<Node>,
     text: String,
     line: u64,
+}
+// Read old projects using the canonical variable; escaped literals remain unchanged.
+fn canonical_variables(value: &str) -> String {
+    let mut result = String::new();
+    let mut rest = value;
+    while !rest.is_empty() {
+        if let Some(tail) = rest.strip_prefix("{{") {
+            result.push_str("{{");
+            rest = tail;
+        } else if let Some(tail) = rest.strip_prefix("{InstallDir}") {
+            result.push_str("{InstallDestination}");
+            rest = tail;
+        } else {
+            let c = rest.chars().next().unwrap();
+            result.push(c);
+            rest = &rest[c.len_utf8()..];
+        }
+    }
+    result
+}
+fn migrate_variables(n: &mut Node) {
+    let attributes: &[&str] = match n.name.as_str() {
+        "File" => &["target"],
+        "Executable" => &["path"],
+        "Shortcut" => &["target", "workingDirectory"],
+        "FinishLaunch" => &["file"],
+        _ => &[],
+    };
+    for attr in attributes {
+        if let Some(value) = n.attrs.get_mut(*attr) {
+            *value = canonical_variables(value);
+        }
+    }
+    if matches!(
+        n.name.as_str(),
+        "Data" | "String" | "Argument" | "WorkingDirectory"
+    ) {
+        n.text = canonical_variables(&n.text);
+    }
+    for child in &mut n.children {
+        migrate_variables(child);
+    }
 }
 impl Node {
     fn error(&self, message: &str) -> Box<dyn std::error::Error> {
@@ -689,6 +960,7 @@ impl Project {
                 upgrade: true,
             },
             source: "./payload".into(),
+            files: None,
             output_directory: "./dist".into(),
             output_file: "Setup.msi".into(),
             license: None,
@@ -706,7 +978,8 @@ impl Project {
         Self::parse(std::str::from_utf8(&bytes)?.trim_start_matches('\u{feff}'))
     }
     pub fn parse(text: &str) -> Result<Self> {
-        let root = tree(text)?;
+        let mut root = tree(text)?;
+        migrate_variables(&mut root);
         if root.name != "ExpressMsiBuilderProject" {
             return Err(root.error("expected ExpressMsiBuilderProject root"));
         }
@@ -715,6 +988,7 @@ impl Project {
             &[
                 "Product",
                 "Source",
+                "Files",
                 "Installation",
                 "UI",
                 "Build",
@@ -773,13 +1047,23 @@ impl Project {
             upgrade: false,
         };
         product.validate().map_err(|e| p.error(&e.to_string()))?;
-        let source = root.required("Source")?;
-        source.check(&["directory"], &[], false)?;
+        let source = root.optional("Source")?;
+        if let Some(source) = source {
+            source.check(&["directory"], &[], false)?;
+        }
+        if source.is_some() == root.optional("Files")?.is_some() {
+            return Err("specify exactly one of Source or Files".into());
+        }
         let build = root.required("Build")?;
         build.check(&["outputDirectory", "outputFile"], &["Cabinet"], false)?;
         let mut result = Self {
             product,
-            source: source.attr("directory")?.into(),
+            source: source
+                .map(|s| s.attr("directory"))
+                .transpose()?
+                .unwrap_or("./payload")
+                .into(),
+            files: None,
             output_directory: build.attr("outputDirectory")?.into(),
             output_file: build.attr("outputFile")?.into(),
             license: None,
@@ -788,6 +1072,15 @@ impl Project {
             cab_limit: None,
             launch: None,
         };
+        if let Some(files) = root.optional("Files")? {
+            files.check(&[], &["File"], false)?;
+            let mut list = Vec::new();
+            for f in &files.children {
+                f.check(&["source", "target"], &[], false)?;
+                list.push((f.attr("source")?.into(), f.attr("target")?.into()));
+            }
+            result.files = Some(list);
+        }
         if let Some(cab) = build.optional("Cabinet")? {
             cab.check(&["storage", "split", "targetSizeMiB"], &[], false)?;
             result.storage = match cab.attr("storage")? {
@@ -936,6 +1229,7 @@ impl Project {
                                 "failurePolicy",
                                 "timeoutSeconds",
                                 "runOnUpgrade",
+                                "timing",
                             ],
                             &["Executable", "Arguments", "WorkingDirectory"],
                             false,
@@ -988,6 +1282,14 @@ impl Project {
                                 .cloned()
                                 .unwrap_or("stop".into()),
                             timeout,
+                            timing: a.attrs.get("timing").cloned().unwrap_or_else(|| {
+                                if phase == "Install" {
+                                    "afterFiles"
+                                } else {
+                                    "beforeRemove"
+                                }
+                                .into()
+                            }),
                             kind: exe.attr("kind")?.into(),
                             path: exe.attr("path")?.into(),
                             arguments,
@@ -1006,6 +1308,9 @@ impl Project {
     }
     pub fn validate(&self) -> Result<()> {
         self.product.validate()?;
+        if let Some(files) = &self.files {
+            crate::payload::validate_selection(files)?;
+        }
         if self
             .cab_limit
             .is_some_and(|n| n % (1024 * 1024) != 0 || !(1..=2047).contains(&(n / (1024 * 1024))))
@@ -1042,21 +1347,29 @@ impl Project {
         let absolute = fs::canonicalize(path)?;
         let base = absolute.parent().ok_or("project has no parent")?;
         let source = base.join(&self.source);
-        if !source.is_dir() {
+        if self.files.is_none() && !source.is_dir() {
             return Err(format!("Source.directory does not exist: {}", source.display()).into());
         }
         let output = base.join(&self.output_directory).join(&self.output_file);
         let license = self.license.as_ref().map(|p| base.join(p));
-        package::build_configured(&package::BuildSpec {
-            source: &source,
-            output: &output,
-            license: license.as_deref(),
-            branding: &self.branding,
-            storage: self.storage,
-            cab_limit: self.cab_limit,
-            launch: self.launch.as_ref(),
-            product: Some(&self.product),
-        })?;
+        let selected = self
+            .files
+            .as_ref()
+            .map(|files| crate::payload::selected(files, base))
+            .transpose()?;
+        package::build_selected(
+            &package::BuildSpec {
+                source: &source,
+                output: &output,
+                license: license.as_deref(),
+                branding: &self.branding,
+                storage: self.storage,
+                cab_limit: self.cab_limit,
+                launch: self.launch.as_ref(),
+                product: Some(&self.product),
+            },
+            selected,
+        )?;
         Ok(output)
     }
     pub fn xml(&self) -> Result<Vec<u8>> {
@@ -1080,8 +1393,21 @@ impl Project {
                     .attr("scope", "perMachine"),
             )?;
             w.write(E::end_element())?;
-            w.write(E::start_element("Source").attr("directory", &self.source))?;
-            w.write(E::end_element())?;
+            if let Some(files) = &self.files {
+                w.write(E::start_element("Files"))?;
+                for (source, target) in files {
+                    w.write(
+                        E::start_element("File")
+                            .attr("source", source)
+                            .attr("target", target),
+                    )?;
+                    w.write(E::end_element())?;
+                }
+                w.write(E::end_element())?;
+            } else {
+                w.write(E::start_element("Source").attr("directory", &self.source))?;
+                w.write(E::end_element())?;
+            }
             w.write(
                 E::start_element("Installation")
                     .attr("directory", &p.installation)
@@ -1170,6 +1496,7 @@ impl Project {
                             .attr("enabled", if a.enabled { "true" } else { "false" })
                             .attr("hideWindow", if a.hide { "true" } else { "false" })
                             .attr("failurePolicy", &a.policy)
+                            .attr("timing", &a.timing)
                             .attr("runOnUpgrade", "false");
                         if a.timeout > 0 {
                             start = start.attr("timeoutSeconds", &timeout);

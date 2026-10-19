@@ -63,3 +63,24 @@ GUID는 대문자·중괄호로 정규화한다. 잘못된 GUID·0 GUID·동일�
 자동 테스트는 XML 왕복·잘못된 입력·상대 경로·x86/x64 실제 MSI 테이블과 설치 세션 열기를 검사한다. 실제 설치·제거는 자동 실행하지 않는다.
 
 기존 파일 처리 정책은 [명세 및 시험 키트](file-policy-test.md)를 참고한다. 생략 시 MSI 기본 규칙을 적용하며, 프로젝트 기반 마법사 복구에도 정책이 적용된다.
+
+
+## 명시적 파일 목록과 실행 시점 확장 (2026-10-19)
+
+Source와 Files 중 정확히 하나를 지정한다. 기존 Source 전체 폴더 방식은 호환된다. Files는 서로 다른 원본에서 고른 파일을 대상 경로로 배치한다. source는 프로젝트 기준 상대 경로 또는 절대 경로다.
+
+```xml
+<Files>
+  <File source="payload/app.exe" target="{InstallDestination}\bin\app.exe" />
+  <File source="other/helper.dll" target="{SystemDir}\helper.dll" />
+  <File source="data/config.txt" target="{ProgramFiles}\Vendor\config.txt" />
+  <File source="data/probe.txt" target="{SystemDrive}\Vendor\probe.txt" />
+  <File source="data/temp.txt" target="{TempDir}\Vendor\temp.txt" />
+</Files>
+```
+
+대상 루트 변수는 InstallDestination, ProgramFiles, SystemDir, SystemDrive, TempDir이다. 변수가 없는 target은 InstallDestination 기준이다. target은 역슬래시로 구분하며 상위 경로, 중복, 파일/디렉터리 충돌은 거부한다. 파일이 없는 목록은 저장할 수 있지만 MSI 빌드에는 파일이 하나 이상 필요하다. 빈 폴더 자체를 설치하는 기능은 포함하지 않는다.
+
+Action의 선택 속성 timing은 Install에서 beforeInstall / beforeFiles / afterFiles / beforeFinish, Uninstall에서 beforeRemove다. 생략하면 Install=afterFiles, Uninstall=beforeRemove다. 같은 시점은 XML 순서를 유지한다. 기존 설치 항목은 이제 afterFiles(InstallFiles 바로 뒤)로 실행되어 레지스트리 기록보다 먼저 실행될 수 있다. 레지스트리 등 나머지 설치 리소스가 필요한 작업은 beforeFinish를 지정한다.
+
+GUI는 Executable.kind=targetPath를 사용하며 변수/절대 경로를 저장한다. installedFile은 XML 호환용으로 유지하되 복사 전 시점에서는 사용할 수 없다. targetPath의 대상 누락은 런타임 실패 정책을 따른다. InstallDestination, SystemDir, SystemDrive, TempDir 변수는 실행 경로·인수·작업 폴더와 레지스트리 문자열 데이터에도 지원한다. Registry/Entry.root에 HKCR을 추가했다.

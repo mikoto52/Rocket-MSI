@@ -6,7 +6,7 @@ Windows 전용 Tauri 2 데스크톱 앱이다. UI는 로컬 HTML/CSS/JavaScript�
 
 ## 실행
 
-완성된 실행 파일은 `dist/builder/ExpressMsiBuilder.exe`에 둔다. Windows WebView2 Runtime이 필요하다. 앱은 관리자 권한으로 실행할 필요가 없으며 프로그램을 빌드만 한다. MSI 실제 설치는 사용자가 별도로 진행한다.
+완성된 실행 파일은 `dist/builder/InstallEmblyBuilder.exe`에 둔다. Windows WebView2 Runtime이 필요하다. 앱은 관리자 권한으로 실행할 필요가 없으며 프로그램을 빌드만 한다. MSI 실제 설치는 사용자가 별도로 진행한다.
 
 소스에서 실행/검사:
 
@@ -21,14 +21,14 @@ cargo clippy --manifest-path builder/Cargo.toml --offline -- -D warnings
 ## 사용 순서
 
 1. 새 프로젝트를 만들거나 기존 .embproj를 연다.
-2. 제품 이름·제작사·버전·원본 폴더를 설정한다. 원본은 폴더 전체를 포함하며 파일 제외 편집은 아직 제공하지 않는다.
+2. 제품 이름·제작사·버전을 설정한다. 설치 파일 화면 왼쪽에서 대상 폴더를 선택한 뒤 파일·디렉터리를 추가하고, 오른쪽 목록에서 이동·삭제한다.
 3. 약관·레지스트리·바로가기·실행 목록을 필요에 따라 추가한다.
 4. 출력 폴더와 MSI 파일명을 지정하고 저장한다.
 5. 프로젝트 검사 후 MSI 빌드를 누른다. 기존 출력 MSI/CAB가 있으면 덮어쓰지 않고 오류를 표시한다.
 
 상대 경로는 프로젝트 파일 기준이다. 다른 폴더에 다른 이름으로 저장하면 기존 소스·약관·출력 참조를 절대 경로로 변환해 의미를 유지한다. 새 프로젝트는 처음 저장하는 위치가 상대 경로 기준이다. 외부에서 파일이 바뀌면 기존 문서 저장/빌드를 중단하며, 새로 열거나 다른 이름으로 저장해야 한다. 저장은 임시 파일을 완성한 뒤 교체하며 저장 중 실패 시 기존 문서를 보존한다.
 
-빌드 중에는 입력을 잠그고 상태 메시지를 표시한다. 빌드 취소·실시간 상세 makecab 출력·파일 트리·사용자 이미지 편집·서명·드래그앤드롭은 후속 기능이다. 빌드 기록은 현재 세션의 상태/오류 메시지다. 기존 XML 주석·서식은 정규화 저장 시 유지하지 않는다.
+빌드 중에는 입력을 잠그고 상태 메시지를 표시한다. 빌드 취소·실시간 상세 makecab 출력·사용자 이미지 편집·서명·드래그앤드롭은 후속 기능이다. 빌드 기록은 현재 세션의 상태/오류 메시지다. 기존 XML 주석·서식은 정규화 저장 시 유지하지 않는다.
 
 ## 검증 상태
 
@@ -37,3 +37,50 @@ Rust 저장 테스트와 컴파일·Clippy, JavaScript 구문 검사 및 브라�
 GUI 예제 시험은 `examples/MyApp.embproj`를 열고 새 outputDirectory를 지정한 후 다른 이름으로 저장·검사·빌드하는 순서로 진행한다. 설치·제거 실행의 시험 프로그램은 앱 편집 중이나 빌드 중 실행하지 않는다.
 
 참고: [Tauri 전제 조건](https://v2.tauri.app/start/prerequisites/), [Rust 명령 호출](https://v2.tauri.app/develop/calling-rust/).
+
+
+## 2026-10-19 편집 화면 개선
+
+- 설치 파일: 왼쪽 대상 폴더 트리, 오른쪽 선택한 폴더의 파일 목록. 여러 파일 추가, 디렉터리 전체 가져오기, 대상 폴더 생성, 선택 파일 이동·삭제를 제공한다.
+- 대상 루트: InstallDestination, ProgramFiles, SystemDir, SystemDrive, TempDir, ProgramData, WindowsDir. ProgramFiles/SystemDir은 x86/x64에 맞춰 해석한다. SystemDrive는 Windows가 설치된 볼륨이다. TempDir은 MSI TempFolder이며 고정된 Windows 하위 Temp를 뜻하지 않는다.
+- 디렉터리 가져오기는 폴더 이름과 하위 파일 구조를 유지한다. 파일 경로를 참조하는 명시적 목록이므로 이후 원본에 생긴 파일은 다시 추가해야 한다. 목록 삭제는 원본을 지우지 않는다. 빈 대상 폴더는 파일을 넣은 뒤 저장되며, 빈 원본 폴더만 가져오기는 지원하지 않는다.
+- 새 GUI 프로젝트는 Files를 사용한다. 기존 Source 프로젝트도 읽고 빌드할 수 있으며 구성 불러오기로 현재 파일 목록을 고정할 수 있다. 두 방식을 동시에 저장하지 않는다.
+- 레지스트리: 왼쪽 루트/키 트리, 오른쪽 값 이름·형식·영역·데이터 목록. HKCR을 지원하며 현재 perMachine 설치에서는 HKLM\Software\Classes에 기록한다.
+- 실행 항목의 대상 종류 선택을 제거했다. 프로그램 경로와 실행 시점을 설정하며 내부 XML은 targetPath를 저장한다. 상대 경로는 InstallDestination 아래로 해석한다.
+- 실행 시점: 설치 시작 전, 파일 복사 전, 파일 복사 후, 설치 완료 전. 실제 실행은 시점 우선, 같은 시점에서는 목록 순서다. 제거는 파일 삭제 전이다. 복구·업그레이드 중에는 실행하지 않는다.
+- 실행 프로그램·인수 및 레지스트리 문자열/다중 문자열에 변수 삽입 버튼을 제공한다. 커서/선택 영역에 삽입한다. DWORD/바이너리는 숫자/HEX 입력이다.
+- 제공 변수: InstallDestination, ProgramFiles, SystemDir, SystemDrive, TempDir, ProgramData, WindowsDir, ProductName, Manufacturer, ProductVersion. 작업 폴더에도 변수를 직접 입력할 수 있다.
+
+자동 검증은 x86/x64 실제 MSI 생성, 특수 폴더 경로 계산(설치 없이), HKCR Root=0, 실행 시점, 잘못된 대상 경로 거부를 포함한다. 브라우저 미리보기에서 특수 루트 트리, 대상 종류 제거, 시점 선택, 프로그램/레지스트리 변수 삽입과 키별 값 표시를 확인했다. 네이티브 파일 선택과 실제 설치·복구·제거는 추가 수동 검증 대상이다.
+
+
+### 계층형 트리 및 변수 통일
+
+파일/레지스트리는 중첩된 부모·자식 트리로 표시한다. 자식이 있는 항목은 화살표로 접고 펼칠 수 있고 폴더/키 선택과 펼침 버튼이 분리되어 있다. 펼침 상태는 섹션 이동 중 유지한다. 새 하위 폴더/키로 이동할 때는 조상 노드를 자동으로 펼친다.
+
+파일 대상에 ProgramData(CommonAppDataFolder), WindowsDir(WindowsFolder)을 추가했다. 설치 경로 변수의 공식 이름은 InstallDestination이며 InstallDir은 변수 선택 목록과 엔진 변수에서 제거했다. 기존 프로젝트의 유효한 InstallDir 템플릿은 열 때 InstallDestination으로 변환하여 저장한다. 이스케이프한 리터럴 중괄호와 원본 파일 경로는 바꾸지 않는다. MSI 내부 INSTALLDIR 및 업그레이드 메타데이터 식별자는 호환성을 위해 유지한다.
+
+
+### 바로가기 대상 및 명령 작업 폴더 변수
+
+바로가기 추가의 설치할 대상 파일 기본값은 `{InstallDestination}\file.exe`다. 입력란 옆 변수 삽입 버튼으로 대상 루트 및 제품 정보 변수를 넣을 수 있다. 예를 들어 `{InstallDestination}\{ProductName}.exe`처럼 사용한다. 대상 파일은 설치 파일 목록에 포함되어 있어야 하며, MSI는 해당 파일 ID를 참조해 실제 설치 위치를 따른다. ProgramData/WindowsDir 등 다른 루트에 배치한 파일도 같은 루트 변수 경로로 지정한다. 기존 상대 대상 경로도 호환한다.
+
+실행 명령어 편집 창의 작업 폴더에도 변수 삽입 버튼을 제공한다. 설치·제거 항목 모두 같은 동작이며 현재 커서/선택 영역에 삽입한다. 비워 두면 실행 파일의 폴더를 사용한다.
+
+
+변수 버튼은 `<`로 표시하며 툴팁/접근성 이름은 변수 삽입이다. 클릭하면 버튼 근처에 컨텍스트 메뉴 형태의 변수 목록이 나타난다. 선택 시 커서/선택 영역에 삽입하며 바깥 클릭과 Esc로 닫힌다. 위/아래 화살표, Home/End, Enter로 선택할 수 있다. 별도 모달 창은 사용하지 않는다.
+
+
+## CLI 배포 및 makecab 창 숨김
+
+`scripts/build-builder.ps1`은 `dist/builder/InstallEmblyBuilder.exe`(GUI), `dist/builder/InstallEmblyBuilderCli.exe`(콘솔 CLI)를 함께 생성한다. CLI는 GUI/WebView2 없이 동일한 Rust 엔진으로 embproj를 빌드한다. makecab은 두 빌더 모두 CREATE_NO_WINDOW로 실행하고 출력/오류를 캡처한다.
+
+```powershell
+.\InstallEmblyBuilderCli.exe --help
+.\InstallEmblyBuilderCli.exe validate "D:\path\MyProject.embproj"
+.\InstallEmblyBuilderCli.exe build "D:\path\MyProject.embproj"
+# build 생략도 지원
+.\InstallEmblyBuilderCli.exe "D:\path\MyProject.embproj"
+```
+
+CLI 종료 코드는 성공 0, 오류 1이다. 상대 경로는 실행 위치가 아닌 프로젝트 폴더를 기준으로 해석한다. 출력 위치/파일명은 embproj의 Build 설정을 따르고 기존 출력은 덮어쓰지 않는다. CLI 자체는 콘솔 출력을 유지하며 MSI를 설치하거나 사용자 실행 항목을 실행하지 않는다. init/normalize/verify 및 기존 원본 경로 직접 빌드 명령도 유지한다.

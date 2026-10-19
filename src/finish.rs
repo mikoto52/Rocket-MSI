@@ -24,7 +24,9 @@ impl Launch {
         {
             return Err("launch file must be an installed .exe".into());
         }
-        let key = payload::key(&self.file)?;
+        let key = payload::key(&payload::target_path(
+            self.file.to_str().ok_or("invalid launch target")?,
+        ))?;
         files
             .iter()
             .find(|f| payload::key(&f.relative).is_ok_and(|k| k == key))

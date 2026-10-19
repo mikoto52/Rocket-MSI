@@ -60,11 +60,23 @@ pub fn template(s: &str, p: &Product, runtime: bool) -> Result<String> {
                 "ProductName" => out.push_str(&literal(&p.name)),
                 "Manufacturer" => out.push_str(&literal(&p.manufacturer)),
                 "ProductVersion" => out.push_str(&literal(&p.version)),
-                "InstallDir" | "ProgramFiles" | "ProgramData" | "WindowsDir" if runtime => {
+                "InstallDestination" | "ProgramFiles" | "ProgramData" | "WindowsDir"
+                | "SystemDir" | "SystemDrive" | "TempDir"
+                    if runtime =>
+                {
                     let property = match name.as_str() {
-                        "InstallDir" => "INSTALLDIR",
+                        "InstallDestination" => "INSTALLDIR",
                         "ProgramData" => "CommonAppDataFolder",
                         "WindowsDir" => "WindowsFolder",
+                        "SystemDir" => {
+                            if p.architecture == "x64" {
+                                "System64Folder"
+                            } else {
+                                "SystemFolder"
+                            }
+                        }
+                        "SystemDrive" => "WindowsVolume",
+                        "TempDir" => "TempFolder",
                         _ => {
                             if p.architecture == "x64" {
                                 "ProgramFiles64Folder"
@@ -171,8 +183,8 @@ pub fn validate(entries: &[Entry], p: &Product) -> Result<()> {
                 "invalid or duplicate registry id (use letters, digits, underscore; max 64)".into(),
             );
         }
-        if !matches!(e.root.as_str(), "HKLM" | "HKCU") {
-            return Err("registry root must be HKLM or HKCU".into());
+        if !matches!(e.root.as_str(), "HKLM" | "HKCU" | "HKCR") {
+            return Err("registry root must be HKLM, HKCU, or HKCR".into());
         }
         if !matches!(e.view.as_str(), "auto" | "registry32" | "registry64")
             || (e.is64(p) && p.architecture == "x86")
@@ -262,7 +274,11 @@ pub fn author(db: &Database, p: &Product) -> Result<()> {
             &["Registry", "Root", "Key", "Name", "Value", "Component_"],
             &[
                 T(&id),
-                I(if e.root == "HKLM" { 2 } else { 1 }),
+                I(match e.root.as_str() {
+                    "HKLM" => 2,
+                    "HKCU" => 1,
+                    _ => 0,
+                }),
                 T(&key),
                 if name.is_empty() { N } else { T(&name) },
                 T(&value),

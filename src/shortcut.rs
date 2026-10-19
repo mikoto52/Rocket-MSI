@@ -26,6 +26,15 @@ fn relative(path: &Path) -> bool {
     !path.as_os_str().is_empty() && path.components().all(|c| matches!(c, Component::Normal(_)))
 }
 impl Entry {
+    fn expanded_target(&self, p: &Product) -> Result<String> {
+        Ok(self
+            .target
+            .to_str()
+            .ok_or("invalid shortcut target")?
+            .replace("{ProductName}", &p.name)
+            .replace("{Manufacturer}", &p.manufacturer)
+            .replace("{ProductVersion}", &p.version))
+    }
     pub fn arguments(&self) -> Result<String> {
         Launch {
             file: self.target.clone(),
@@ -33,8 +42,8 @@ impl Entry {
         }
         .target()
     }
-    fn resolve<'a>(&self, files: &'a [payload::File]) -> Result<&'a payload::File> {
-        let target = payload::key(&self.target)?;
+    fn resolve<'a>(&self, files: &'a [payload::File], p: &Product) -> Result<&'a payload::File> {
+        let target = payload::key(&payload::target_path(&self.expanded_target(p)?))?;
         files
             .iter()
             .find(|f| payload::key(&f.relative).is_ok_and(|s| s == target))
@@ -47,11 +56,18 @@ impl Entry {
                 .into()
             })
     }
-    fn working_directory_id(&self, files: &[payload::File]) -> Result<String> {
+    fn working_directory_id(&self, files: &[payload::File], x64: bool) -> Result<String> {
         if self.working_directory == Path::new(".") {
             return Ok("INSTALLDIR".into());
         }
-        let wanted = payload::key(&self.working_directory)?;
+        let raw = self
+            .working_directory
+            .to_str()
+            .ok_or("invalid working directory")?;
+        if let Some(root) = payload::root_directory(raw, x64) {
+            return Ok(root.into());
+        }
+        let wanted = payload::key(&payload::target_path(raw))?;
         for file in files {
             for parent in file.relative.ancestors().skip(1) {
                 if !parent.as_os_str().is_empty() && payload::key(parent)? == wanted {
@@ -103,6 +119,10 @@ pub fn validate(entries: &[Entry], p: &Product) -> Result<()> {
                     .into(),
             );
         }
+        payload::validate_selection(&[(
+            "shortcut-target".into(),
+            e.expanded_target(p)?.replace('/', "\\"),
+        )])?;
         if e.description.contains('\0') || e.description.encode_utf16().count() > 255 {
             return Err("invalid shortcut description (maximum 255 characters)".into());
         }
@@ -116,16 +136,16 @@ pub fn validate(entries: &[Entry], p: &Product) -> Result<()> {
     }
     Ok(())
 }
-pub fn validate_payload(entries: &[Entry], files: &[payload::File]) -> Result<()> {
+pub fn validate_payload(entries: &[Entry], files: &[payload::File], p: &Product) -> Result<()> {
     for e in entries {
-        e.resolve(files)?;
-        e.working_directory_id(files)?;
+        e.resolve(files, p)?;
+        e.working_directory_id(files, p.architecture == "x64")?;
     }
     Ok(())
 }
 pub fn author(db: &Database, p: &Product, files: &[payload::File]) -> Result<()> {
     validate(&p.shortcuts, p)?;
-    validate_payload(&p.shortcuts, files)?;
+    validate_payload(&p.shortcuts, files, p)?;
     if p.shortcuts.iter().any(|e| e.location == "desktop") {
         db.insert(
             "Directory",
@@ -146,7 +166,7 @@ pub fn author(db: &Database, p: &Product, files: &[payload::File]) -> Result<()>
             &["Directory", "Directory_Parent", "DefaultDir"],
             &[T("EMB_MENU"), T("ProgramMenuFolder"), T(&name)],
         )?;
-        let file = e.resolve(files)?;
+        let file = e.resolve(files, p)?;
         db.insert(
             "RemoveFile",
             &[
@@ -166,11 +186,11 @@ pub fn author(db: &Database, p: &Product, files: &[payload::File]) -> Result<()>
         )?;
     }
     for e in &p.shortcuts {
-        let file = e.resolve(files)?;
+        let file = e.resolve(files, p)?;
         let args = e.arguments()?;
         let name = payload::msi_name(Path::new(&e.name))?;
         let target = format!("[#{}]", file.id);
-        let wd = e.working_directory_id(files)?;
+        let wd = e.working_directory_id(files, p.architecture == "x64")?;
         let id = format!("S_{}", e.id);
         db.insert(
             "Shortcut",

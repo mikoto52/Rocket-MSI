@@ -80,6 +80,12 @@ pub struct BuildSpec<'a> {
     pub product: Option<&'a crate::config::Product>,
 }
 pub fn build_configured(spec: &BuildSpec<'_>) -> Result<()> {
+    build_selected(spec, None)
+}
+pub fn build_selected(
+    spec: &BuildSpec<'_>,
+    selected: Option<Vec<crate::payload::File>>,
+) -> Result<()> {
     let BuildSpec {
         source,
         output,
@@ -100,7 +106,7 @@ pub fn build_configured(spec: &BuildSpec<'_>) -> Result<()> {
         return Err("branding text must be a single line without NUL".into());
     }
     let license = license.map(crate::license::load).transpose()?;
-    if !source.is_file() && !source.is_dir() {
+    if selected.is_none() && !source.is_file() && !source.is_dir() {
         return Err("source must be an existing file or directory".into());
     }
     if output.exists() {
@@ -123,11 +129,17 @@ pub fn build_configured(spec: &BuildSpec<'_>) -> Result<()> {
             "Data1.cab already exists; choose a separate output folder for each package".into(),
         );
     }
-    let mut files = crate::payload::collect(source, &parent)?;
+    let mut files = match selected {
+        Some(files) => files,
+        None => crate::payload::collect(source, &parent)?,
+    };
+    if files.is_empty() {
+        return Err("select at least one payload file".into());
+    }
     if spec.product.is_some() {
         crate::payload::namespace(&mut files, product)?;
     }
-    crate::shortcut::validate_payload(&product.shortcuts, &files)?;
+    crate::shortcut::validate_payload(&product.shortcuts, &files, product)?;
     crate::actions::validate_payload(product, &files)?;
     if let Some(launch) = launch {
         launch.resolve(&files)?;
@@ -202,7 +214,43 @@ pub fn build_configured(spec: &BuildSpec<'_>) -> Result<()> {
     for (id, parent, name) in [
         ("TARGETDIR", None, "SourceDir"),
         (program_files, Some("TARGETDIR"), "."),
+        (
+            if product.architecture == "x64" {
+                "System64Folder"
+            } else {
+                "SystemFolder"
+            },
+            Some("TARGETDIR"),
+            ".",
+        ),
+        ("TempFolder", Some("TARGETDIR"), "."),
+        ("CommonAppDataFolder", Some("TARGETDIR"), "."),
+        ("WindowsFolder", Some("TARGETDIR"), "."),
+        ("EMB_SYSTEMDRIVE", Some("TARGETDIR"), "."),
     ] {
+        if matches!(
+            id,
+            "System64Folder"
+                | "SystemFolder"
+                | "TempFolder"
+                | "EMB_SYSTEMDRIVE"
+                | "CommonAppDataFolder"
+                | "WindowsFolder"
+        ) && !files.iter().any(|f| {
+            f.relative
+                .components()
+                .next()
+                .and_then(|c| c.as_os_str().to_str())
+                .and_then(|s| crate::payload::root_directory(s, product.architecture == "x64"))
+                == Some(id)
+        }) && !product.shortcuts.iter().any(|s| {
+            s.working_directory
+                .to_str()
+                .and_then(|v| crate::payload::root_directory(v, product.architecture == "x64"))
+                == Some(id)
+        }) {
+            continue;
+        }
         db.insert(
             "Directory",
             &["Directory", "Directory_Parent", "DefaultDir"],
@@ -210,6 +258,33 @@ pub fn build_configured(spec: &BuildSpec<'_>) -> Result<()> {
         )?;
     }
     let parts = product.install_parts()?;
+    if files
+        .iter()
+        .any(|f| f.relative.starts_with("{SystemDrive}"))
+        || product
+            .shortcuts
+            .iter()
+            .any(|s| s.working_directory == Path::new("{SystemDrive}"))
+    {
+        // WindowsVolume is a property, not a valid standard Directory identifier.
+        db.insert(
+            "CustomAction",
+            &["Action", "Type", "Source", "Target"],
+            &[
+                T("EmbSetSystemDrive"),
+                I(51),
+                T("EMB_SYSTEMDRIVE"),
+                T("[WindowsVolume]"),
+            ],
+        )?;
+        for table in ["InstallUISequence", "InstallExecuteSequence"] {
+            db.insert(
+                table,
+                &["Action", "Sequence"],
+                &[T("EmbSetSystemDrive"), I(750)],
+            )?;
+        }
+    }
     let mut ancestor = program_files.to_owned();
     for (index, part) in parts.iter().enumerate() {
         let id = if index + 1 == parts.len() {
@@ -344,6 +419,15 @@ fn author_payload(
         for part in &parts[..parts.len() - 1] {
             let ancestor = parent.clone();
             parent.push(part.as_os_str());
+            if ancestor.as_os_str().is_empty()
+                && let Some(root) = crate::payload::root_directory(
+                    part.as_os_str().to_str().ok_or("invalid target root")?,
+                    x64,
+                )
+            {
+                dirs.insert(parent.clone(), root.to_owned());
+                continue;
+            }
             if !dirs.contains_key(&parent) {
                 let id = crate::payload::identifier("D_", &parent)?;
                 let parent_id = if ancestor.as_os_str().is_empty() {

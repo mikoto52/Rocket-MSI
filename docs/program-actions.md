@@ -87,3 +87,22 @@ MSI 실행 시퀀스와 통합하며 UI 시퀀스만으로 실행하지 않는�
 - [Custom Action Type 18](https://learn.microsoft.com/en-us/windows/win32/msi/custom-action-type-18): 설치된 실행 파일의 호출 시점과 종료 코드.
 - [Deferred Execution Custom Actions](https://learn.microsoft.com/en-us/windows/win32/msi/deferred-execution-custom-actions): 실행 시퀀스, 시스템 변경, 속성 접근 제약.
 - [Custom Action Return Processing Options](https://learn.microsoft.com/en-us/windows/win32/msi/custom-action-return-processing-options): 동기 실행과 실패 처리.
+
+
+## 2026-10-19 실행 시점 개선
+
+현재 GUI의 대상 종류 선택은 제거하고 프로그램 경로와 실행 시점을 입력한다. XML은 targetPath를 쓰고 기존 installedFile은 호환한다. 프로그램 경로와 인수에는 변수 삽입 버튼이 있다.
+
+| timing | UI 표시 | 실행 시퀀스 |
+|---|---|---|
+| beforeInstall | 설치 시작 전 | MSI 트랜잭션 초기화 후, 페이로드 변경 전 (1610부터, 표준 액션 1800 회피) |
+| beforeFiles | 파일 복사 전 | RemoveFiles 이후 / InstallFiles 이전 (3600부터) |
+| afterFiles | 파일 복사 후 | InstallFiles 이후 / CreateShortcuts 이전 (4100부터) |
+| beforeFinish | 설치 완료 전 | 파일·바로가기·레지스트리 기록 후, 제품 등록/완료 전 (5600부터) |
+| beforeRemove | 파일 삭제 전 | 기존 제거 시점 유지 (2000부터) |
+
+각 항목은 setter/deferred/clear 세 행을 사용한다. 실제 실행은 시점별로 정렬하고 같은 시점에서는 목록 순서다. UI 화면 표시 전 사전 실행이 아니라 MSI 실행 트랜잭션 안에서 실행한다. 미지정 설치 시점은 afterFiles다. 과거의 레지스트리 이후 실행을 필요로 하는 프로젝트는 beforeFinish를 명시해야 한다. 복구·업그레이드 실행 제외와 실패 정책은 유지한다. 외부 프로그램 변경의 자동 롤백을 보장하지 않는다.
+
+추가 경로 변수: InstallDestination, SystemDir(아키텍처별), SystemDrive=WindowsVolume, TempDir=TempFolder. WindowsVolume은 Directory 식별자로 직접 사용하지 않고 별도 EMB_SYSTEMDRIVE 디렉터리를 CostInitialize 전에 설정한다.
+
+참고: [커스텀 액션 순서](https://learn.microsoft.com/en-us/windows/win32/msi/sequencing-custom-actions), [WindowsVolume](https://learn.microsoft.com/en-us/windows/win32/msi/windowsvolume), [TempFolder](https://learn.microsoft.com/en-us/windows/win32/msi/tempfolder), [Registry Root](https://learn.microsoft.com/en-us/windows/win32/msi/registry-table).

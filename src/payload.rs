@@ -12,6 +12,109 @@ pub struct File {
     pub component: String,
     pub guid: String,
 }
+pub fn root_directory(token: &str, x64: bool) -> Option<&'static str> {
+    match token {
+        "{InstallDestination}" => Some("INSTALLDIR"),
+        "{ProgramFiles}" => Some(if x64 {
+            "ProgramFiles64Folder"
+        } else {
+            "ProgramFilesFolder"
+        }),
+        "{SystemDir}" => Some(if x64 {
+            "System64Folder"
+        } else {
+            "SystemFolder"
+        }),
+        "{SystemDrive}" => Some("EMB_SYSTEMDRIVE"),
+        "{TempDir}" => Some("TempFolder"),
+        "{ProgramData}" => Some("CommonAppDataFolder"),
+        "{WindowsDir}" => Some("WindowsFolder"),
+        _ => None,
+    }
+}
+pub fn target_path(target: &str) -> PathBuf {
+    PathBuf::from(
+        target
+            .strip_prefix("{InstallDestination}\\")
+            .unwrap_or(target),
+    )
+}
+pub fn validate_selection(entries: &[(String, String)]) -> Result<()> {
+    if entries.len() > 32767 {
+        return Err("at most 32767 files are supported".into());
+    }
+    let mut seen = BTreeSet::new();
+    let mut directories = BTreeSet::new();
+    for (source, target) in entries {
+        if source.trim().is_empty() || source.contains('\0') {
+            return Err("file source is empty or contains NUL".into());
+        }
+        let normalized = target_path(target);
+        let path = normalized.as_path();
+        if target.is_empty()
+            || target.contains('/')
+            || target
+                .split('\\')
+                .any(|part| part.is_empty() || matches!(part, "." | ".."))
+            || !path
+                .components()
+                .all(|c| matches!(c, std::path::Component::Normal(_)))
+        {
+            return Err("file target must be a relative Windows path without traversal".into());
+        }
+        for (i, part) in path.components().enumerate() {
+            let text = part.as_os_str().to_str().ok_or("invalid Unicode target")?;
+            if i == 0 && text.starts_with('{') {
+                if root_directory(text, true).is_none() || path.components().count() < 2 {
+                    return Err("unknown target root or missing filename".into());
+                }
+            } else {
+                if text.contains(['{', '}']) {
+                    return Err("variables are only supported as the target root".into());
+                }
+                msi_name(Path::new(part.as_os_str()))?;
+            }
+        }
+        if !seen.insert(key(path)?) {
+            return Err("case-insensitive target path collision".into());
+        }
+        for parent in path
+            .ancestors()
+            .skip(1)
+            .filter(|p| !p.as_os_str().is_empty())
+        {
+            directories.insert(key(parent)?);
+        }
+    }
+    if seen.iter().any(|p| directories.contains(p)) {
+        return Err("file target conflicts with a directory".into());
+    }
+    Ok(())
+}
+pub fn selected(entries: &[(String, String)], base: &Path) -> Result<Vec<File>> {
+    validate_selection(entries)?;
+    let mut files = Vec::new();
+    for (source, target) in entries {
+        let source = base.join(source);
+        // Check every ancestor too: a regular file may reside inside a junction.
+        for ancestor in source.ancestors() {
+            reject_reparse(ancestor)?;
+        }
+        if !source.is_file() {
+            return Err(format!("source file does not exist: {}", source.display()).into());
+        }
+        let relative = target_path(target);
+        files.push(File {
+            source,
+            id: identifier("F_", &relative)?,
+            component: identifier("C_", &relative)?,
+            guid: component_guid(&relative)?,
+            relative,
+        });
+    }
+    files.sort_by_cached_key(|f| key(&f.relative).unwrap_or_default());
+    Ok(files)
+}
 pub fn key(path: &Path) -> Result<String> {
     Ok(path
         .to_str()
@@ -44,6 +147,30 @@ pub(crate) fn component_guid(path: &Path) -> Result<String> {
     ))
 }
 pub fn namespace(files: &mut [File], product: &crate::config::Product) -> Result<()> {
+    let mut destinations = BTreeSet::new();
+    let mut parents = BTreeSet::new();
+    for file in files.iter() {
+        let path = key(&file.relative)?;
+        let physical = if let Some(rest) = path.strip_prefix("{PROGRAMFILES}\\") {
+            format!("PROGRAMFILES\\{rest}")
+        } else if path.starts_with('{') {
+            path
+        } else {
+            format!(
+                "PROGRAMFILES\\{}\\{path}",
+                product.install_parts()?.join("\\").to_uppercase()
+            )
+        };
+        if !destinations.insert(physical.clone()) {
+            return Err("multiple target roots resolve to the same file".into());
+        }
+        for parent in Path::new(&physical).ancestors().skip(1) {
+            parents.insert(key(parent)?);
+        }
+    }
+    if destinations.iter().any(|p| parents.contains(p)) {
+        return Err("file/directory conflict between target roots".into());
+    }
     for file in files {
         let seed = format!(
             "{}|{}|{}|{}",

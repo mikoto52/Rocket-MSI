@@ -6,7 +6,7 @@
   <Source directory="./payload" />
   <Installation directory="{ProgramFiles}\InstallEmbly\Registry Demo" allowDirectoryChange="true" />
   <Registry>
-    <Entry id="install_path" root="HKLM" key="Software\{Manufacturer}\RegistryDemo" name="InstallPath" type="REG_SZ"><Data>{InstallDir}</Data></Entry>
+    <Entry id="install_path" root="HKLM" key="Software\{Manufacturer}\RegistryDemo" name="InstallPath" type="REG_SZ"><Data>{InstallDestination}</Data></Entry>
     <Entry id="program_files" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="ProgramFiles" type="REG_SZ"><Data>{ProgramFiles}</Data></Entry>
     <Entry id="program_data" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="ProgramData" type="REG_SZ"><Data>{ProgramData}</Data></Entry>
     <Entry id="windows_dir" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="WindowsDir" type="REG_SZ"><Data>{WindowsDir}</Data></Entry>
@@ -16,7 +16,7 @@
     <Entry id="enabled" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="Enabled" type="REG_DWORD"><Data>1</Data></Entry>
     <Entry id="max_dword" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="MaxDword" type="REG_DWORD"><Data>0xFFFFFFFF</Data></Entry>
     <Entry id="blob" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="Blob" type="REG_BINARY"><Data>00 01 7F 80 FE FF</Data></Entry>
-    <Entry id="paths" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="Paths" type="REG_MULTI_SZ"><Data><String>{InstallDir}\hello.txt</String><String>  공백 유지  </String><String>[literal]</String></Data></Entry>
+    <Entry id="paths" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="Paths" type="REG_MULTI_SZ"><Data><String>{InstallDestination}\hello.txt</String><String>  공백 유지  </String><String>[literal]</String></Data></Entry>
     <Entry id="single" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="Single" type="REG_MULTI_SZ"><Data><String>#one</String></Data></Entry>
     <Entry id="default_value" root="HKLM" key="Software\InstallEmbly\RegistryDemo\Defaults" name="" type="REG_SZ"><Data>기본값</Data></Entry>
     <Entry id="view32" root="HKLM" key="Software\InstallEmbly\RegistryDemo" name="View32" type="REG_SZ" view="registry32"><Data>32-bit view</Data></Entry>

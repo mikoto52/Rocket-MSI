@@ -15,6 +15,16 @@ unsafe extern "system" {
     fn MsiOpenPackageExW(path: *const u16, options: u32, package: *mut Handle) -> u32;
     #[cfg(test)]
     fn MsiDoActionW(package: Handle, action: *const u16) -> u32;
+    #[cfg(test)]
+    fn MsiGetTargetPathW(
+        package: Handle,
+        folder: *const u16,
+        value: *mut u16,
+        length: *mut u32,
+    ) -> u32;
+    #[cfg(test)]
+    fn MsiGetPropertyW(package: Handle, name: *const u16, value: *mut u16, length: *mut u32)
+    -> u32;
     fn MsiOpenDatabaseW(path: *const u16, mode: *const u16, db: *mut Handle) -> u32;
     fn MsiCloseHandle(handle: Handle) -> u32;
     fn MsiDatabaseOpenViewW(db: Handle, sql: *const u16, view: *mut Handle) -> u32;
@@ -139,13 +149,17 @@ pub fn sha256(text: &str) -> Result<[u8; 32]> {
 }
 /// Validates package recognition without starting an installation session.
 pub fn verify_package(path: &Path) -> Result<()> {
-    verify_package_inner(path, false)
+    verify_package_inner(path, 0)
 }
 #[cfg(test)]
 pub(crate) fn verify_app_search(path: &Path) -> Result<()> {
-    verify_package_inner(path, true)
+    verify_package_inner(path, 1)
 }
-fn verify_package_inner(path: &Path, search: bool) -> Result<()> {
+#[cfg(test)]
+pub(crate) fn verify_directory_costing(path: &Path) -> Result<()> {
+    verify_package_inner(path, 2)
+}
+fn verify_package_inner(path: &Path, search: u8) -> Result<()> {
     // Windows Installer sessions for the same product cannot be opened
     // concurrently, even when both handles ignore the installed state.
     static SESSION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -190,12 +204,56 @@ fn verify_package_inner(path: &Path, search: bool) -> Result<()> {
     )?;
     let _package = Owned(handle);
     #[cfg(test)]
-    if search {
+    if search == 1 {
         // Only read registry/search properties; never run the installation sequence.
         check(
             unsafe { MsiDoActionW(handle, wide("AppSearch").as_ptr()) },
             "AppSearch",
         )?;
+    }
+    #[cfg(test)]
+    if search == 2 {
+        // Costing resolves paths in memory; it does not copy files or install anything.
+        for action in [
+            "EmbSetSystemDrive",
+            "CostInitialize",
+            "FileCost",
+            "CostFinalize",
+        ] {
+            check(
+                unsafe { MsiDoActionW(handle, wide(action).as_ptr()) },
+                action,
+            )?;
+        }
+        for (folder, property) in [
+            ("EMB_SYSTEMDRIVE", "WindowsVolume"),
+            ("TempFolder", "TempFolder"),
+        ] {
+            let mut target = vec![0u16; 32768];
+            let mut t = 32767;
+            let mut expected = vec![0u16; 32768];
+            let mut e = 32767;
+            check(
+                unsafe {
+                    MsiGetTargetPathW(handle, wide(folder).as_ptr(), target.as_mut_ptr(), &mut t)
+                },
+                "target path",
+            )?;
+            check(
+                unsafe {
+                    MsiGetPropertyW(
+                        handle,
+                        wide(property).as_ptr(),
+                        expected.as_mut_ptr(),
+                        &mut e,
+                    )
+                },
+                "folder property",
+            )?;
+            if t == 0 || target[..t as usize] != expected[..e as usize] {
+                return Err(format!("incorrect resolved directory {folder}").into());
+            }
+        }
     }
     #[cfg(not(test))]
     let _ = search;

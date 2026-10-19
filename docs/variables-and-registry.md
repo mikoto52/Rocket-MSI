@@ -77,7 +77,7 @@ keep는 제거 후에도 값을 남기는 의도적인 옵션이다. 해당 항�
 
 ```text
 HKLM\Software\MyCompany\MyApp   (registry64)
-  InstallPath    REG_SZ         {InstallDir}
+  InstallPath    REG_SZ         {InstallDestination}
   InstallDate    REG_SZ         {InstallDate}
   ProgramFiles   REG_SZ         {ProgramFiles}
   DataPath       REG_SZ         {ProgramData}\MyCompany\MyApp

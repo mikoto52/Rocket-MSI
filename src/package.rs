@@ -67,6 +67,7 @@ pub fn build_with_finish(
         cab_limit,
         launch,
         product: None,
+        quick_msi: false,
     })
 }
 pub struct BuildSpec<'a> {
@@ -78,6 +79,7 @@ pub struct BuildSpec<'a> {
     pub cab_limit: Option<u64>,
     pub launch: Option<&'a crate::finish::Launch>,
     pub product: Option<&'a crate::config::Product>,
+    pub quick_msi: bool,
 }
 pub fn build_configured(spec: &BuildSpec<'_>) -> Result<()> {
     build_selected(spec, None)
@@ -97,6 +99,9 @@ pub fn build_selected(
         ..
     } = *spec;
     let fallback = crate::config::Product::default();
+    if spec.quick_msi && spec.license.is_some() {
+        return Err("Quick MSI first unit does not yet support License; use UI mode=wizard".into());
+    }
     let product = spec.product.unwrap_or(&fallback);
     product.validate()?;
     if cab_limit == Some(0) {
@@ -158,6 +163,7 @@ pub fn build_selected(
             )
         })?;
         let copied = fs::copy(&file.source, work.0.join(&file.id))?;
+        crate::cabinet::normalize_staged_timestamp(&work.0.join(&file.id))?;
         sizes.push(i32::try_from(copied).map_err(|_| {
             format!(
                 "file exceeds supported 2 GiB boundary: {}",
@@ -175,6 +181,16 @@ pub fn build_selected(
     let staged = work.0.join("prototype.msi");
     let db = Database::create(&staged)?;
     schema(&db)?;
+    if spec.quick_msi {
+        let bytes = if product.architecture == "x64" {
+            include_bytes!(concat!(env!("OUT_DIR"), "/emb-quick-x64.dll")).as_slice()
+        } else {
+            include_bytes!(concat!(env!("OUT_DIR"), "/emb-quick-x86.dll")).as_slice()
+        };
+        let dll = work.0.join("embquick.dll");
+        fs::write(&dll, bytes)?;
+        db.embedded_ui(&dll)?;
+    }
     for (key, value) in [
         ("ProductCode", product.product_code.as_str()),
         ("UpgradeCode", product.upgrade_code.as_str()),
@@ -381,6 +397,24 @@ pub fn build_selected(
     }
     if let Some(launch) = launch {
         author_finish_launch(&db, &files, launch)?;
+        if spec.quick_msi {
+            let file = launch.resolve(&files)?;
+            for (name, value) in [
+                ("EMB_QUICK_LAUNCH_COMPONENT", file.guid.clone()),
+                ("EMB_QUICK_LAUNCH_COUNT", launch.arguments.len().to_string()),
+            ] {
+                db.insert("Property", &["Property", "Value"], &[T(name), T(&value)])?;
+            }
+            for (i, arg) in launch.arguments.iter().enumerate() {
+                if !arg.is_empty() {
+                    db.insert(
+                        "Property",
+                        &["Property", "Value"],
+                        &[T(&format!("EMB_QUICK_LAUNCH_ARG_{i}")), T(arg)],
+                    )?;
+                }
+            }
+        }
     }
     crate::actions::author(&db, product, &files, &work.0)?;
     crate::upgrade::author(&db, product)?;
@@ -394,7 +428,11 @@ pub fn build_selected(
             &[T("LaunchConditions"), I(100)],
         )?;
     }
-    db.summary(&package_code, product.architecture == "x64")?;
+    db.summary(
+        &package_code,
+        product.architecture == "x64",
+        if spec.quick_msi { 450 } else { 200 },
+    )?;
     db.commit()?;
     drop(db);
     verify(&staged)?;
@@ -2008,6 +2046,49 @@ pub fn verify(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cab_build_handles_out_of_range_dates_without_modifying_sources() -> Result<()> {
+        use std::time::{Duration, UNIX_EPOCH};
+        let base = std::env::current_dir()?.join("target");
+        fs::create_dir_all(&base)?;
+        let work = Work(base.join(format!("emb-cab-dates-{}", msi::guid()?)));
+        let source = work.0.join("source");
+        fs::create_dir_all(&source)?;
+        let dates = [
+            UNIX_EPOCH + Duration::from_secs(1),
+            UNIX_EPOCH + Duration::from_secs(1_600_000_000),
+            UNIX_EPOCH + Duration::from_secs(4_500_000_000),
+        ];
+        for (i, date) in dates.iter().enumerate() {
+            let file = fs::File::create(source.join(format!("file{i}.txt")))?;
+            use std::io::Write;
+            (&file).write_all(format!("payload {i}").as_bytes())?;
+            file.set_times(fs::FileTimes::new().set_modified(*date))?;
+        }
+        let output = work.0.join("output/Setup.msi");
+        build(&source, &output, None, "Rocket MSI", CabStorage::External)?;
+        let extracted = work.0.join("extracted");
+        fs::create_dir(&extracted)?;
+        let system = std::env::var_os("SystemRoot").ok_or("SystemRoot missing")?;
+        let expanded = Command::new(PathBuf::from(system).join("System32/expand.exe"))
+            .arg("-R")
+            .arg(output.parent().unwrap().join("Data1.cab"))
+            .arg("-F:*")
+            .arg(&extracted)
+            .output()?;
+        assert!(expanded.status.success());
+        let files = crate::payload::collect(&source, &work.0)?;
+        for (i, date) in dates.iter().enumerate() {
+            let path = source.join(format!("file{i}.txt"));
+            assert_eq!(path.metadata()?.modified()?, *date);
+            let entry = files
+                .iter()
+                .find(|f| f.source.file_name() == path.file_name())
+                .unwrap();
+            assert_eq!(fs::read(extracted.join(&entry.id))?, fs::read(&path)?);
+        }
+        Ok(())
+    }
     #[test]
     fn finish_launch_is_opt_in_and_only_scheduled_from_success_ui() -> Result<()> {
         let base = std::env::current_dir()?.join("target");

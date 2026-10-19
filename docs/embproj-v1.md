@@ -20,7 +20,7 @@ init은 새 ProductCode·UpgradeCode를 파일에 저장한다. 기본 소스는
 | Shortcuts (선택) | Shortcut 반복: 시작 메뉴/바탕화면, 대상 파일·인수·작업 폴더. [명세 및 시험](shortcut-test.md) |
 | Actions (선택) | Install/Uninstall의 Action 목록: 인수·창 숨김·오류 정책. [현재 명세 및 시험](actions-test.md) |
 | Upgrade (선택) | enabled=true/false. [현재 제한과 시험](upgrade-test.md). 새 프로젝트는 true, 요소 생략 시 false |
-| UI (선택) | License, BrandingText, FinishLaunch |
+| UI (선택) | mode=wizard/quick, 생략 시 wizard. License, BrandingText, FinishLaunch. Quick은 첫 단위로 License 미지원 |
 | UI/License | file: UTF-8 TXT 또는 RTF |
 | UI/BrandingText | 한 줄 텍스트. 기본 Rocket MSI. 전체 마법사 문구와 하단에 사용; 이전 기본값은 자동 변환 |
 | UI/FinishLaunch | file: 소스 내부 상대 EXE 경로 |

@@ -19,6 +19,8 @@ pub mod package;
 pub mod payload;
 #[cfg(windows)]
 pub mod project;
+#[cfg(all(windows, test))]
+mod quick_policy;
 #[cfg(windows)]
 pub mod registry;
 #[cfg(windows)]

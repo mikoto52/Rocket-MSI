@@ -20,6 +20,7 @@ pub struct Project {
     pub output_file: String,
     pub license: Option<String>,
     pub branding: String,
+    pub quick_msi: bool,
     pub storage: CabStorage,
     pub cab_limit: Option<u64>,
     pub launch: Option<Launch>,
@@ -28,6 +29,125 @@ pub struct Project {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn quick_mode_roundtrips_and_embeds_matching_architecture_without_basic_ui_override()
+    -> Result<()> {
+        let root = std::env::current_dir()?
+            .join("target")
+            .join(format!("quick-mode-{}", msi::guid()?));
+        fs::create_dir_all(&root)?;
+        let t = Temp(root);
+        fs::write(t.0.join("probe.exe"), b"test payload; never executed")?;
+        for arch in ["x86", "x64"] {
+            let mut p = Project::new()?;
+            p.product.architecture = arch.into();
+            p.quick_msi = true;
+            p.source = fs::canonicalize("examples/payload")?.display().to_string();
+            p.files = Some(vec![(
+                t.0.join("probe.exe").display().to_string(),
+                "{InstallDestination}\\probe.exe".into(),
+            )]);
+            p.launch = Some(Launch {
+                file: "probe.exe".into(),
+                arguments: vec![
+                    "".into(),
+                    "a b".into(),
+                    "[literal]".into(),
+                    "quote\"".into(),
+                ],
+            });
+            p.output_directory = format!("out-{arch}");
+            let path = t.0.join(format!("{arch}.embproj"));
+            p.save_new(&path)?;
+            let q = Project::load(&path)?;
+            assert!(q.quick_msi);
+            let output = q.build(&path)?;
+            let db = msi::Database::read(&output)?;
+            assert_eq!(
+                db.query(
+                    "SELECT `FileName`,`Attributes`,`MessageFilter` FROM `MsiEmbeddedUI`",
+                    3
+                )?,
+                vec![vec!["embquick.dll", "1", "201328387"]]
+            );
+            assert_eq!(
+                db.query(
+                    "SELECT `Value` FROM `Property` WHERE `Property` = 'EMB_QUICK_LAUNCH_COUNT'",
+                    1
+                )?,
+                vec![vec!["4"]]
+            );
+            assert_eq!(
+                db.query(
+                    "SELECT `Value` FROM `Property` WHERE `Property` = 'EMB_QUICK_LAUNCH_ARG_2'",
+                    1
+                )?,
+                vec![vec!["[literal]"]]
+            );
+            assert!(
+                db.query(
+                    "SELECT `Value` FROM `Property` WHERE `Property` = 'EMB_QUICK_LAUNCH_ARG_0'",
+                    1
+                )?
+                .is_empty()
+            );
+            let bytes = if arch == "x64" {
+                include_bytes!(concat!(env!("OUT_DIR"), "/emb-quick-x64.dll")).as_slice()
+            } else {
+                include_bytes!(concat!(env!("OUT_DIR"), "/emb-quick-x86.dll")).as_slice()
+            };
+            let offset = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+            assert_eq!(&bytes[offset..offset + 4], b"PE\0\0");
+            assert_eq!(
+                u16::from_le_bytes(bytes[offset + 4..offset + 6].try_into().unwrap()),
+                if arch == "x64" { 0x8664 } else { 0x14c }
+            );
+            let u32_at =
+                |n: usize| u32::from_le_bytes(bytes[n..n + 4].try_into().unwrap()) as usize;
+            let section_count =
+                u16::from_le_bytes(bytes[offset + 6..offset + 8].try_into().unwrap()) as usize;
+            let optional_size =
+                u16::from_le_bytes(bytes[offset + 20..offset + 22].try_into().unwrap()) as usize;
+            let sections = offset + 24 + optional_size;
+            let map = |rva: usize| -> usize {
+                for i in 0..section_count {
+                    let section = sections + i * 40;
+                    let base = u32_at(section + 12);
+                    let size = u32_at(section + 8).max(u32_at(section + 16));
+                    if (base..base + size).contains(&rva) {
+                        return rva - base + u32_at(section + 20);
+                    }
+                }
+                panic!("unmapped PE RVA");
+            };
+            let exports = map(u32_at(offset + 24 + if arch == "x64" { 112 } else { 96 }));
+            let names = map(u32_at(exports + 32));
+            let names: Vec<_> = (0..u32_at(exports + 24))
+                .map(|i| {
+                    let start = map(u32_at(names + i * 4));
+                    let end = bytes[start..].iter().position(|b| *b == 0).unwrap() + start;
+                    String::from_utf8_lossy(&bytes[start..end]).into_owned()
+                })
+                .collect();
+            for symbol in [
+                "InitializeEmbeddedUI",
+                "EmbeddedUIHandler",
+                "ShutdownEmbeddedUI",
+            ] {
+                assert!(
+                    names.iter().any(|n| n == symbol),
+                    "{arch}: missing export {symbol}"
+                );
+            }
+            p.license = Some("terms.txt".into());
+            assert!(p.validate().is_err());
+        }
+        let wizard = Project::new()?;
+        assert!(!wizard.quick_msi);
+        let xml = String::from_utf8(wizard.xml()?)?.replace(" mode=\"wizard\"", "");
+        assert!(!Project::parse(&xml)?.quick_msi);
+        Ok(())
+    }
     struct Temp(PathBuf);
     impl Drop for Temp {
         fn drop(&mut self) {
@@ -79,13 +199,17 @@ mod tests {
         let xml = String::from_utf8(Project::new()?.xml()?)?;
         for bad in [
             xml.replace("schemaVersion=\"1\"", "schemaVersion=\"2\""),
-            xml.replace("<UI>", "<UI><Registry/>"),
+            xml.replace("<UI mode=\"wizard\">", "<UI mode=\"wizard\"><Registry/>"),
             xml.replace(
                 "allowDirectoryChange=\"true\"",
                 "allowDirectoryChange=\"yes\"",
             ),
             xml.replace("version=\"1.0.0\"", "version=\"256.0.0\""),
-            xml.replace("<UI>", "<Source directory=\"x\"/><UI>"),
+            xml.replace(
+                "<UI mode=\"wizard\">",
+                "<Source directory=\"x\"/><UI mode=\"wizard\">",
+            ),
+            xml.replace("mode=\"wizard\"", "mode=\"unknown\""),
             xml.replace("{ProgramFiles}", "{Unknown}"),
             xml.replace("existingFiles=\"default\"", "existingFiles=\"unknown\""),
             xml.replace("split=\"none\"", "split=\"size\" targetSizeMiB=\"0\""),
@@ -967,6 +1091,7 @@ impl Project {
             output_file: "Setup.msi".into(),
             license: None,
             branding: "Rocket MSI".into(),
+            quick_msi: false,
             storage: CabStorage::Embedded,
             cab_limit: None,
             launch: None,
@@ -1070,6 +1195,7 @@ impl Project {
             output_file: build.attr("outputFile")?.into(),
             license: None,
             branding: "Rocket MSI".into(),
+            quick_msi: false,
             storage: CabStorage::Embedded,
             cab_limit: None,
             launch: None,
@@ -1107,7 +1233,16 @@ impl Project {
             }
         }
         if let Some(ui) = root.optional("UI")? {
-            ui.check(&[], &["License", "BrandingText", "FinishLaunch"], false)?;
+            ui.check(
+                &["mode"],
+                &["License", "BrandingText", "FinishLaunch"],
+                false,
+            )?;
+            result.quick_msi = match ui.attrs.get("mode").map(String::as_str).unwrap_or("wizard") {
+                "wizard" => false,
+                "quick" => true,
+                _ => return Err("UI.mode must be wizard or quick".into()),
+            };
             if let Some(n) = ui.optional("License")? {
                 n.check(&["file"], &[], false)?;
                 result.license = Some(n.attr("file")?.into());
@@ -1314,6 +1449,9 @@ impl Project {
     }
     pub fn validate(&self) -> Result<()> {
         self.product.validate()?;
+        if self.quick_msi && self.license.is_some() {
+            return Err("Quick MSI 첫 단위는 사용권 계약 표시를 아직 지원하지 않습니다. 약관을 해제하거나 마법사 방식을 선택하세요.".into());
+        }
         if let Some(files) = &self.files {
             crate::payload::validate_selection(files)?;
         }
@@ -1373,6 +1511,7 @@ impl Project {
                 cab_limit: self.cab_limit,
                 launch: self.launch.as_ref(),
                 product: Some(&self.product),
+                quick_msi: self.quick_msi,
             },
             selected,
         )?;
@@ -1537,7 +1676,10 @@ impl Project {
                     .attr("enabled", if p.upgrade { "true" } else { "false" }),
             )?;
             w.write(E::end_element())?;
-            w.write(E::start_element("UI"))?;
+            w.write(
+                E::start_element("UI")
+                    .attr("mode", if self.quick_msi { "quick" } else { "wizard" }),
+            )?;
             if let Some(file) = &self.license {
                 w.write(E::start_element("License").attr("file", file))?;
                 w.write(E::end_element())?;

@@ -1,6 +1,6 @@
 # Rocket MSI 빌더 사용 안내
 
-기본 브랜딩은 Rocket MSI이며 설치 화면 설정에서 변경한다. 같은 문구가 하단과 마법사 이름에 반영된다. 설치 UI의 최신 흐름과 유지보수 확인 단계는 [설치 UI 안내](installer-ui.md)를 따른다. Quick MSI는 아직 제공하지 않는다.
+기본 브랜딩은 Rocket MSI이며 설치 화면 설정에서 변경한다. 같은 문구가 하단과 마법사 이름에 반영된다. 설치 UI의 최신 흐름과 유지보수 확인 단계는 [설치 UI 안내](installer-ui.md)를 따른다. Quick MSI 첫 단위는 화면 방식 선택에서 제공하며 제한과 검증 절차는 [Quick MSI 안내](quick-msi.md)를 따른다.
 
 앱 아이콘은 `assets/installer`의 기존 큐브 도형을 사용한다. 같은 생성 함수를 공유해 GUI/CLI EXE 아이콘, 창/작업 표시줄 아이콘, 화면의 로고와 패키지 아이콘을 통일했다. PNG는 투명 배경이고 ICO는 16~256픽셀 여러 크기를 포함한다. `scripts/generate-app-icon.ps1`로 다시 생성한다.
 
@@ -8,9 +8,29 @@ Windows 전용 Tauri 2 데스크톱 앱이다. UI는 로컬 HTML/CSS/JavaScript�
 
 화면은 제품 정보, 설치 파일, 설치 화면, 레지스트리, 바로가기, 실행 목록, 빌드로 나뉜다. 레지스트리 네 형식, 시작 메뉴·바탕화면, 설치/제거 실행 항목의 인수 목록·작업 폴더·창 숨김·무시/알림/중단·실행 순서도 편집한다. 업그레이드 활성화와 GUID 관리, 다음 버전 준비(마지막 버전 숫자 증가 및 새 ProductCode 발급)를 제공한다.
 
+Quick MSI를 만들려면 왼쪽 **설치 화면**에서 **설치 화면 방식 → 설치 화면 → Quick MSI**를 선택한 뒤 저장하고 빌드한다. 일반 마법사는 **마법사**를 선택한다. 선택값은 `.embproj`의 `<UI mode="quick">` 또는 `<UI mode="wizard">`에 저장되며 프로젝트를 다시 열어도 유지된다. 모드가 없는 기존 프로젝트는 마법사를 사용한다. Quick MSI에서는 현재 사용권 계약 표시를 지원하지 않으므로 약관 파일을 지정하면 빌드를 차단한다.
+
 ## 실행
 
+프로젝트 파일을 실행 인수로 전달하면 파일 선택 창 없이 해당 프로젝트를 연다. 인수가 없으면 새 프로젝트로 시작한다. 공백·한글 경로는 따옴표로 감싼다. 여러 파일이나 잘못된 파일을 지정하면 오류를 표시하고 새 프로젝트 화면을 제공한다.
+
+```powershell
+.\RocketMsiBuilder.exe "C:\Users\User\Documents\내 프로젝트.embproj"
+```
+
+설치 프로그램에서 파일 연결을 작성할 때 `RocketMSI.Project\shell\open\command`의 기본값은 `"{InstallDestination}\RocketMsiBuilder.exe" "%1"`로 지정한다. `.embproj`의 기본값은 `RocketMSI.Project`로 연결한다. 빌더 자체 실행은 시스템 파일 연결을 변경하지 않는다. 프로젝트의 Registry에 추가할 예시는 다음과 같다. Windows의 사용자 기본 앱 선택 정책에 따라 연결 적용 여부는 별도로 확인한다.
+
+```xml
+<Registry>
+  <Entry id="project_extension" root="HKCR" key=".embproj" name="" type="REG_SZ"><Data>RocketMSI.Project</Data></Entry>
+  <Entry id="project_description" root="HKCR" key="RocketMSI.Project" name="" type="REG_SZ"><Data>Rocket MSI 프로젝트</Data></Entry>
+  <Entry id="project_open" root="HKCR" key="RocketMSI.Project\shell\open\command" name="" type="REG_SZ"><Data>"{InstallDestination}\RocketMsiBuilder.exe" "%1"</Data></Entry>
+</Registry>
+```
+
 완성된 실행 파일은 `dist/builder/RocketMsiBuilder.exe`에 둔다. Windows WebView2 Runtime이 필요하다. 앱은 관리자 권한으로 실행할 필요가 없으며 프로그램을 빌드만 한다. MSI 실제 설치는 사용자가 별도로 진행한다.
+
+창 너비 1200px 이하에서는 오른쪽 요약 패널을 본문 상단의 간단한 작업 패널로 전환한다. MSI 빌드·프로젝트 검사·출력 폴더 열기 버튼은 유지한다. 넓은 창에서는 기존 오른쪽 요약 패널을 사용한다.
 
 소스에서 실행/검사:
 

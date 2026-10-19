@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExpressMsiBuilderProject schemaVersion="1">
+  <Product name="Rocket MSI Quick Demo" manufacturer="Rocket MSI" version="1.0.0" productCode="{EE7932CC-90D4-47D4-9316-CC5FCBC0439C}" upgradeCode="{06ED0667-1733-425C-BC55-3089E5874D0C}" architecture="x64" scope="perMachine" />
+  <Files>
+    <File source="../dist/quick-demo/payload/DemoLaunch.exe" target="{InstallDestination}\DemoLaunch.exe" />
+    <File source="./payload/hello.txt" target="{InstallDestination}\hello.txt" />
+  </Files>
+  <Installation directory="{ProgramFiles}\{Manufacturer}\{ProductName}" existingFiles="default" allowDirectoryChange="false" />
+  <Upgrade enabled="true" />
+  <UI mode="quick">
+    <BrandingText>Rocket MSI</BrandingText>
+    <FinishLaunch file="DemoLaunch.exe">
+      <Arguments>
+        <Argument>first argument</Argument>
+        <Argument>[literal]</Argument>
+      </Arguments>
+    </FinishLaunch>
+  </UI>
+  <Build outputDirectory="../dist/quick-demo/package" outputFile="Setup.msi">
+    <Cabinet storage="embedded" split="none" />
+  </Build>
+</ExpressMsiBuilderProject>

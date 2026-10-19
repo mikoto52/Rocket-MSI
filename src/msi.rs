@@ -461,6 +461,33 @@ impl Database {
     pub fn binary(&self, name: &str, path: &Path) -> Result<()> {
         self.insert_stream("Binary", name, path)
     }
+    pub fn embedded_ui(&self, path: &Path) -> Result<()> {
+        self.execute("CREATE TABLE `MsiEmbeddedUI` (`MsiEmbeddedUI` CHAR(72) NOT NULL, `FileName` CHAR(255) NOT NULL, `Attributes` SHORT NOT NULL, `MessageFilter` LONG, `Data` OBJECT NOT NULL PRIMARY KEY `MsiEmbeddedUI`)")?;
+        let view = self.view("INSERT INTO `MsiEmbeddedUI` (`MsiEmbeddedUI`,`FileName`,`Attributes`,`MessageFilter`,`Data`) VALUES (?,?,?,?,?)")?;
+        let record = Owned(unsafe { MsiCreateRecord(5) });
+        for (field, value) in [(1, "QuickMSI"), (2, "embquick.dll")] {
+            check(
+                unsafe { MsiRecordSetStringW(record.0, field, wide(value).as_ptr()) },
+                "embedded UI name",
+            )?;
+        }
+        check(
+            unsafe { MsiRecordSetInteger(record.0, 3, 1) },
+            "embedded UI attributes",
+        )?;
+        check(
+            unsafe { MsiRecordSetInteger(record.0, 4, 0x0c000703) },
+            "embedded UI messages",
+        )?;
+        check(
+            unsafe { MsiRecordSetStreamW(record.0, 5, path_wide(path).as_ptr()) },
+            "embedded UI DLL",
+        )?;
+        check(
+            unsafe { MsiViewExecute(view.0, record.0) },
+            "insert embedded UI",
+        )
+    }
     fn insert_stream(&self, table: &str, name: &str, path: &Path) -> Result<()> {
         let view = self.view(&format!(
             "INSERT INTO `{table}` (`Name`,`Data`) VALUES (?,?)"
@@ -476,7 +503,7 @@ impl Database {
         )?;
         check(unsafe { MsiViewExecute(view.0, record.0) }, "insert stream")
     }
-    pub fn summary(&self, package_code: &str, x64: bool) -> Result<()> {
+    pub fn summary(&self, package_code: &str, x64: bool, minimum_installer: i32) -> Result<()> {
         let mut h = 0;
         check(
             unsafe { MsiGetSummaryInformationW(self.0.0, ptr::null(), 10, &mut h) },
@@ -504,7 +531,7 @@ impl Database {
                 "summary string",
             )?;
         }
-        for (id, value) in [(14, 200), (15, 2), (19, 2)] {
+        for (id, value) in [(14, minimum_installer), (15, 2), (19, 2)] {
             check(
                 unsafe {
                     MsiSummaryInfoSetPropertyW(info.0, id, 3, value, ptr::null(), ptr::null())

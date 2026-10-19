@@ -1,6 +1,6 @@
 # Rocket MSI 설치 UI
 
-2026-10-19 기준. 현재는 Windows Installer의 기본 대화상자로 구성한 마법사 방식이다. Quick MSI는 후속 계획이며 현재 빌더에서 선택할 수 없다.
+2026-10-19 기준. 현재는 Windows Installer의 기본 대화상자로 구성한 마법사 방식이다. Quick MSI 첫 단위는 별도 화면 방식이며 [Quick MSI 안내](quick-msi.md)를 따른다. 이 문서는 기존 마법사 방식의 명세다.
 
 ## 화면 흐름
 

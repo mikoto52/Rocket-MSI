@@ -11,6 +11,7 @@ Rocket MSI는 Windows Installer 패키지(`.msi`)를 만드는 **Windows 전용 
 | 제품 설정 | 제품명·제작사·버전, x86/x64, ProductCode·UpgradeCode 관리 |
 | 설치 파일 | 펼치기/접기 트리, 파일 다중 선택, 디렉터리 전체 가져오기, 대상 폴더별 배치·이동·삭제 |
 | 설치 화면 | 한글 마법사, 환영·완료·중단의 좌측 이미지, 배너 화면, 전체 문구 BrandingText, TXT/RTF 사용권 계약 동의 |
+| Quick MSI 첫 단위 | Embedded UI DLL 포함, 간편 설치·진행·완료·유지보수 화면, 설치 후 실행 선택. 실제 설치 검증 진행 중 |
 | 유지보수 | 아이콘이 있는 복구·제거 선택과 작업별 확인 페이지, 기존 파일의 MSI 기본 규칙·건너뛰기·덮어쓰기 정책 |
 | 레지스트리 | HKLM·HKCU·HKCR, 32/64비트 영역, REG_SZ·REG_DWORD·REG_BINARY·REG_MULTI_SZ, 키 트리/값 목록 |
 | 바로가기 | 시작 메뉴·바탕화면, 설치된 대상 파일, 인수·작업 폴더·경로 변수 |
@@ -110,7 +111,7 @@ powershell -NoProfile -File scripts/test-builder-cli.ps1
 
 ## 현재 제한과 후속 작업
 
-- **Quick MSI**는 Embedded UI DLL을 MSI에 포함하는 간편 설치 화면으로 계획 중입니다. 현재 구현·선택 옵션은 없으며, 기존 마법사 방식의 검증을 마친 다음 진행합니다. [후속 계획](docs/development-plan.md#quick-msi-후속-계획)
+- **Quick MSI 첫 단위**를 빌더와 `<UI mode="quick">`에서 선택할 수 있습니다. 약관 표시·경로 편집·사용자 제품 아이콘은 아직 제공하지 않으며 실제 설치·실행 분기의 수동 검증이 필요합니다. [설정과 시험 안내](docs/quick-msi.md)
 - 현재 설치 범위는 모든 사용자(`perMachine`)입니다. 빌더는 MSI를 생성하며 설치 권한 상승을 처리하는 Setup.exe 부트스트래퍼는 후속 과제입니다.
 - 일부 덮어쓰기 복구 시험에서 일반 권한 실행의 롤백 정리 오류가 남아 있습니다. 관리자 실행은 통과했으며 [기록](docs/development-plan.md)을 참고하세요.
 - 업그레이드는 같은 UpgradeCode, 아키텍처와 설치 경로 구성의 제품을 대상으로 합니다. 새 버전에는 버전 증가와 새 ProductCode가 필요합니다. 설치 위치를 옮기는 업그레이드는 지원하지 않습니다.
@@ -129,6 +130,7 @@ Rocket MSI는 무료 배포와 소스 공개를 목표로 개발합니다. 프�
 - [프로젝트 XML 형식](docs/embproj-v1.md)
 - [약관·브랜딩](docs/license-and-branding.md)
 - [설치 UI와 유지보수 흐름](docs/installer-ui.md)
+- [Quick MSI 첫 단위와 시험](docs/quick-msi.md)
 - [변수·레지스트리](docs/variables-and-registry.md) / [레지스트리 시험](docs/registry-test.md)
 - [바로가기 시험](docs/shortcut-test.md)
 - [설치·제거 실행](docs/program-actions.md) / [실행 시험](docs/actions-test.md)

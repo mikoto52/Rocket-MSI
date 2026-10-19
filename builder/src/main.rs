@@ -57,6 +57,10 @@ async fn open_project(state: State<'_, AppState>) -> Result<Option<Draft>, Strin
     .await
     .map_err(|e| e.to_string())?;
     let Some(path) = path else { return Ok(None) };
+    load_document(&state, path).map(Some)
+}
+fn load_document(state: &AppState, path: PathBuf) -> Result<Draft, String> {
+    let path = fs::canonicalize(path).map_err(|e| format!("프로젝트를 열 수 없습니다: {e}"))?;
     let p = Project::load(&path).map_err(|e| e.to_string())?;
     let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let result = Draft {
@@ -64,7 +68,32 @@ async fn open_project(state: State<'_, AppState>) -> Result<Option<Draft>, Strin
         path: Some(path.display().to_string()),
     };
     *state.document.lock().unwrap() = Some(Document { path, text });
-    Ok(Some(result))
+    Ok(result)
+}
+fn startup_path(
+    mut args: impl Iterator<Item = std::ffi::OsString>,
+) -> Result<Option<PathBuf>, String> {
+    let Some(arg) = args.next() else {
+        return Ok(None);
+    };
+    if args.next().is_some() {
+        return Err("프로젝트 파일 하나만 지정하세요.".into());
+    }
+    let path = PathBuf::from(arg);
+    if !path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("embproj"))
+    {
+        return Err(".embproj 프로젝트 파일을 지정하세요.".into());
+    }
+    Ok(Some(path))
+}
+#[tauri::command]
+fn initial_project(state: State<AppState>) -> Result<Draft, String> {
+    match startup_path(std::env::args_os().skip(1))? {
+        Some(path) => load_document(&state, path),
+        None => new_project(state),
+    }
 }
 #[tauri::command]
 async fn pick_path(kind: String) -> Result<Option<String>, String> {
@@ -344,6 +373,7 @@ fn main() {
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             new_project,
+            initial_project,
             open_project,
             pick_path,
             pick_payload,
@@ -361,6 +391,44 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn startup_argument_preserves_unicode_spaces_and_rejects_extra_arguments() {
+        let path = std::ffi::OsString::from("C:\\작업 폴더\\로켓 프로젝트.EMBPROJ");
+        assert_eq!(
+            startup_path(vec![path.clone()].into_iter()).unwrap(),
+            Some(PathBuf::from(&path))
+        );
+        assert!(startup_path(Vec::new().into_iter()).unwrap().is_none());
+        assert!(startup_path(vec![path.clone(), path].into_iter()).is_err());
+        assert!(startup_path(vec!["other.txt".into()].into_iter()).is_err());
+    }
+    #[test]
+    fn startup_document_uses_same_load_and_save_tracking_as_file_picker() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("시작 인수 시험-{}", msi::guid().unwrap()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("한글 프로젝트.embproj");
+        let original = xml(&Project::new().unwrap()).unwrap();
+        fs::write(&path, &original).unwrap();
+        let state = AppState::default();
+        let draft = load_document(&state, path.clone()).unwrap();
+        assert_eq!(
+            draft.path.unwrap(),
+            fs::canonicalize(&path).unwrap().display().to_string()
+        );
+        assert!(Project::parse(&draft.xml).is_ok());
+        assert_eq!(
+            state.document.lock().unwrap().as_ref().unwrap().text,
+            original
+        );
+        assert!(load_document(&state, root.join("missing.embproj")).is_err());
+        assert_eq!(
+            state.document.lock().unwrap().as_ref().unwrap().text,
+            original
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn directory_import_keeps_nested_names_and_sources() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

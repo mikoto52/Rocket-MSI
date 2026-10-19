@@ -1493,7 +1493,7 @@ pub unsafe extern "system" fn InitializeEmbeddedUI(
             status: if installed {
                 "수행할 작업을 선택해 주세요."
             } else {
-                "설치를 시작하려면 설치를 눌러주세요."
+                ""
             }
             .into(),
             result: None,

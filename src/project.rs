@@ -24,11 +24,48 @@ pub struct Project {
     pub storage: CabStorage,
     pub cab_limit: Option<u64>,
     pub launch: Option<Launch>,
+    pub signing: Option<crate::signing::Signing>,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn signing_roundtrip_rejects_password_and_never_publishes_on_failure() -> Result<()> {
+        let t = temp()?;
+        fs::create_dir(t.0.join("payload"))?;
+        fs::write(t.0.join("payload/app.txt"), b"signing test")?;
+        let mut p = Project::new()?;
+        p.signing = Some(crate::signing::Signing {
+            pfx_file: "certs/missing.pfx".into(),
+            timestamp_url: "https://timestamp.example.test".into(),
+            ..Default::default()
+        });
+        let text = String::from_utf8(p.xml()?)?;
+        assert_eq!(Project::parse(&text)?.signing, p.signing);
+        assert!(
+            Project::parse(&text.replace("source=\"pfx\"", "source=\"pfx\" password=\"secret\""))
+                .is_err()
+        );
+        let path = t.0.join("signed.embproj");
+        p.save_new(&path)?;
+        assert!(p.build_with_password(&path, Some("not persisted")).is_err());
+        assert!(!t.0.join("dist/Setup.msi").exists());
+        assert!(!t.0.join("dist/Data1.cab").exists());
+        p.storage = CabStorage::External;
+        assert!(p.build_with_password(&path, Some("not persisted")).is_err());
+        assert!(!t.0.join("dist/Setup.msi").exists());
+        assert!(!t.0.join("dist/Data1.cab").exists());
+        let config = p.signing.as_mut().unwrap();
+        config.source = "store".into();
+        config.thumbprint = "AB".repeat(20);
+        config.store_location = "localMachine".into();
+        assert_eq!(
+            Project::parse(&String::from_utf8(p.xml()?)?)?.signing,
+            p.signing
+        );
+        Ok(())
+    }
     #[test]
     fn quick_mode_roundtrips_and_embeds_matching_architecture_without_basic_ui_override()
     -> Result<()> {
@@ -38,7 +75,7 @@ mod tests {
         fs::create_dir_all(&root)?;
         let t = Temp(root);
         fs::write(t.0.join("probe.exe"), b"test payload; never executed")?;
-        for arch in ["x86", "x64"] {
+        for arch in ["x86", "x64", "arm64"] {
             let mut p = Project::new()?;
             p.product.architecture = arch.into();
             p.quick_msi = true;
@@ -91,7 +128,9 @@ mod tests {
                 )?
                 .is_empty()
             );
-            let bytes = if arch == "x64" {
+            let bytes = if arch == "arm64" {
+                include_bytes!(concat!(env!("OUT_DIR"), "/emb-quick-arm64.dll")).as_slice()
+            } else if arch == "x64" {
                 include_bytes!(concat!(env!("OUT_DIR"), "/emb-quick-x64.dll")).as_slice()
             } else {
                 include_bytes!(concat!(env!("OUT_DIR"), "/emb-quick-x86.dll")).as_slice()
@@ -100,7 +139,11 @@ mod tests {
             assert_eq!(&bytes[offset..offset + 4], b"PE\0\0");
             assert_eq!(
                 u16::from_le_bytes(bytes[offset + 4..offset + 6].try_into().unwrap()),
-                if arch == "x64" { 0x8664 } else { 0x14c }
+                match arch {
+                    "arm64" => 0xaa64,
+                    "x64" => 0x8664,
+                    _ => 0x14c,
+                }
             );
             let u32_at =
                 |n: usize| u32::from_le_bytes(bytes[n..n + 4].try_into().unwrap()) as usize;
@@ -120,7 +163,7 @@ mod tests {
                 }
                 panic!("unmapped PE RVA");
             };
-            let exports = map(u32_at(offset + 24 + if arch == "x64" { 112 } else { 96 }));
+            let exports = map(u32_at(offset + 24 + if arch != "x86" { 112 } else { 96 }));
             let names = map(u32_at(exports + 32));
             let names: Vec<_> = (0..u32_at(exports + 24))
                 .map(|i| {
@@ -234,7 +277,7 @@ mod tests {
         });
         p.product.allow_directory_change = false;
         let mut components = Vec::new();
-        for arch in ["x86", "x64"] {
+        for arch in ["x86", "x64", "arm64"] {
             p.product.architecture = arch.into();
             p.output_directory = format!("./out-{arch}");
             let path = t.0.join(format!("{arch}.embproj"));
@@ -258,7 +301,7 @@ mod tests {
             );
             assert_eq!(
                 db.query("SELECT `Attributes` FROM `Component`", 1)?[0][0],
-                if arch == "x64" { "256" } else { "0" }
+                if arch != "x86" { "256" } else { "0" }
             );
             assert_eq!(db.query("SELECT `Attributes` FROM `Control` WHERE `Dialog_` = 'Path' AND `Control` = 'Folder'",1)?[0][0],"1");
             assert_eq!(db.query("SELECT `Attributes` FROM `Control` WHERE `Dialog_` = 'Path' AND `Control` = 'Browse'",1)?[0][0],"1");
@@ -552,7 +595,7 @@ mod tests {
                 .unwrap()
                 .into(),
         );
-        for arch in ["x86", "x64"] {
+        for arch in ["x86", "x64", "arm64"] {
             p.product.architecture = arch.into();
             p.output_directory = format!("out-{arch}");
             let path = t.0.join(format!("{arch}.embproj"));
@@ -682,7 +725,7 @@ mod tests {
     fn selected_payload_roots_hkcr_and_action_timings_build_real_msi() -> Result<()> {
         let t = temp()?;
         fs::write(t.0.join("probe.exe"), b"not executed")?;
-        for arch in ["x86", "x64"] {
+        for arch in ["x86", "x64", "arm64"] {
             let mut p = Project::new()?;
             p.product.architecture = arch.into();
             p.files = Some(
@@ -790,12 +833,12 @@ mod tests {
             )?;
             for root in [
                 "INSTALLDIR",
-                if arch == "x64" {
+                if arch != "x86" {
                     "ProgramFiles64Folder"
                 } else {
                     "ProgramFilesFolder"
                 },
-                if arch == "x64" {
+                if arch != "x86" {
                     "System64Folder"
                 } else {
                     "SystemFolder"
@@ -1095,6 +1138,7 @@ impl Project {
             storage: CabStorage::Embedded,
             cab_limit: None,
             launch: None,
+            signing: None,
         })
     }
     pub fn load(path: &Path) -> Result<Self> {
@@ -1182,7 +1226,11 @@ impl Project {
             return Err("specify exactly one of Source or Files".into());
         }
         let build = root.required("Build")?;
-        build.check(&["outputDirectory", "outputFile"], &["Cabinet"], false)?;
+        build.check(
+            &["outputDirectory", "outputFile"],
+            &["Cabinet", "Signing"],
+            false,
+        )?;
         let mut result = Self {
             product,
             source: source
@@ -1199,7 +1247,51 @@ impl Project {
             storage: CabStorage::Embedded,
             cab_limit: None,
             launch: None,
+            signing: None,
         };
+        if let Some(signing) = build.optional("Signing")? {
+            signing.check(
+                &[
+                    "enabled",
+                    "source",
+                    "pfxFile",
+                    "thumbprint",
+                    "storeLocation",
+                    "timestampUrl",
+                ],
+                &[],
+                false,
+            )?;
+            if boolean(
+                signing
+                    .attrs
+                    .get("enabled")
+                    .map(String::as_str)
+                    .unwrap_or("true"),
+            )? {
+                result.signing = Some(crate::signing::Signing {
+                    source: signing.attr("source")?.into(),
+                    pfx_file: signing.attrs.get("pfxFile").cloned().unwrap_or_default(),
+                    thumbprint: signing
+                        .attrs
+                        .get("thumbprint")
+                        .cloned()
+                        .unwrap_or_default()
+                        .replace(' ', "")
+                        .to_ascii_uppercase(),
+                    store_location: signing
+                        .attrs
+                        .get("storeLocation")
+                        .cloned()
+                        .unwrap_or("currentUser".into()),
+                    timestamp_url: signing
+                        .attrs
+                        .get("timestampUrl")
+                        .cloned()
+                        .unwrap_or_default(),
+                });
+            }
+        }
         if let Some(files) = root.optional("Files")? {
             files.check(&[], &["File"], false)?;
             let mut list = Vec::new();
@@ -1449,6 +1541,9 @@ impl Project {
     }
     pub fn validate(&self) -> Result<()> {
         self.product.validate()?;
+        if let Some(signing) = &self.signing {
+            signing.validate()?;
+        }
         if self.quick_msi && self.license.is_some() {
             return Err("Quick MSI 첫 단위는 사용권 계약 표시를 아직 지원하지 않습니다. 약관을 해제하거나 마법사 방식을 선택하세요.".into());
         }
@@ -1487,6 +1582,10 @@ impl Project {
         Ok(())
     }
     pub fn build(&self, path: &Path) -> Result<PathBuf> {
+        let password = std::env::var("ROCKET_MSI_PFX_PASSWORD").ok();
+        self.build_with_password(path, password.as_deref())
+    }
+    pub fn build_with_password(&self, path: &Path, password: Option<&str>) -> Result<PathBuf> {
         self.validate()?;
         let absolute = fs::canonicalize(path)?;
         let base = absolute.parent().ok_or("project has no parent")?;
@@ -1501,7 +1600,7 @@ impl Project {
             .as_ref()
             .map(|files| crate::payload::selected(files, base))
             .transpose()?;
-        package::build_selected(
+        package::build_selected_signed(
             &package::BuildSpec {
                 source: &source,
                 output: &output,
@@ -1514,6 +1613,7 @@ impl Project {
                 quick_msi: self.quick_msi,
             },
             selected,
+            self.signing.as_ref().map(|config| (config, base, password)),
         )?;
         Ok(output)
     }
@@ -1730,6 +1830,18 @@ impl Project {
             }
             w.write(c)?;
             w.write(E::end_element())?;
+            if let Some(signing) = &self.signing {
+                w.write(
+                    E::start_element("Signing")
+                        .attr("enabled", "true")
+                        .attr("source", &signing.source)
+                        .attr("pfxFile", &signing.pfx_file)
+                        .attr("thumbprint", &signing.thumbprint)
+                        .attr("storeLocation", &signing.store_location)
+                        .attr("timestampUrl", &signing.timestamp_url),
+                )?;
+                w.write(E::end_element())?;
+            }
             w.write(E::end_element())?;
             w.write(E::end_element())?;
         }

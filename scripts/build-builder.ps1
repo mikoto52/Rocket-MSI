@@ -1,3 +1,4 @@
+param([string]$OutputDirectory='dist/builder')
 # Build a portable GUI executable with dependency license notices; no installer runs.
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -7,7 +8,7 @@ try {
     if($LASTEXITCODE -ne 0){throw 'CLI build failed'}
     & cargo build --manifest-path builder/Cargo.toml --release --offline
     if($LASTEXITCODE -ne 0){throw 'Tauri build failed'}
-    $output=Join-Path $root 'dist/builder'
+    $output=if([IO.Path]::IsPathRooted($OutputDirectory)){[IO.Path]::GetFullPath($OutputDirectory)}else{[IO.Path]::GetFullPath((Join-Path $root $OutputDirectory))}
     [IO.Directory]::CreateDirectory($output)|Out-Null
     Copy-Item -LiteralPath (Join-Path $root 'builder/target/release/install-embly-builder.exe') -Destination (Join-Path $output 'RocketMsiBuilder.exe')
     Copy-Item -LiteralPath (Join-Path $root 'target/release/emb-msi.exe') -Destination (Join-Path $output 'RocketMsiBuilderCli.exe')

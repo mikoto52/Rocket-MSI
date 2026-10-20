@@ -13,7 +13,7 @@ init은 새 ProductCode·UpgradeCode를 파일에 저장한다. 기본 소스는
 
 | 요소 | 속성 및 내용 |
 |---|---|
-| Product (필수) | name, manufacturer, version, productCode, upgradeCode, architecture=x86/x64, scope=perMachine |
+| Product (필수) | name, manufacturer, version, productCode, upgradeCode, architecture=x86/x64/arm64, scope=perMachine |
 | Source 또는 Files | 기존 Source의 directory 또는 선택한 파일 목록. GUI는 Files로 개별 원본·대상 경로를 저장하며 기존 Source 프로젝트도 읽음 |
 | Installation (필수) | directory, allowDirectoryChange=true/false, existingFiles=default/skip/overwrite (선택) |
 | Registry (선택) | Entry 반복: REG_SZ, REG_DWORD, REG_BINARY, REG_MULTI_SZ. [명세 및 시험](registry-test.md) |
@@ -24,6 +24,7 @@ init은 새 ProductCode·UpgradeCode를 파일에 저장한다. 기본 소스는
 | UI/License | file: UTF-8 TXT 또는 RTF |
 | UI/BrandingText | 한 줄 텍스트. 기본 Rocket MSI. 전체 마법사 문구와 하단에 사용; 이전 기본값은 자동 변환 |
 | UI/FinishLaunch | file: 소스 내부 상대 EXE 경로 |
+| Build/Signing (선택) | enabled, source=pfx/store, pfxFile, thumbprint, storeLocation=currentUser/localMachine, timestampUrl. 암호는 저장하지 않음. [서명 안내](signing.md) |
 | FinishLaunch/Arguments | Argument 요소를 순서대로 반복. 요소 하나가 인수 하나 |
 | Build (필수) | outputDirectory, outputFile: 경로 없는 .msi 파일명 |
 | Build/Cabinet (선택) | storage=embedded/external, split=none/size, size일 때 targetSizeMiB=1..2047 |
@@ -60,7 +61,7 @@ GUID는 대문자·중괄호로 정규화한다. 잘못된 GUID·0 GUID·동일�
 4. 같은 MSI를 다시 열어 복구·제거를 시험한다. 이 예제는 이전 고정 시험용 제품과 다른 GUID다.
 5. 배포 시 MyApp.msi와 Data1.cab을 함께 둔다.
 
-자동 테스트는 XML 왕복·잘못된 입력·상대 경로·x86/x64 실제 MSI 테이블과 설치 세션 열기를 검사한다. 실제 설치·제거는 자동 실행하지 않는다.
+자동 테스트는 XML 왕복·잘못된 입력·상대 경로·x86/x64/arm64 실제 MSI 테이블과 설치 세션 열기를 검사한다. 실제 설치·제거는 자동 실행하지 않는다.
 
 기존 파일 처리 정책은 [명세 및 시험 키트](file-policy-test.md)를 참고한다. 생략 시 MSI 기본 규칙을 적용하며, 프로젝트 기반 마법사 복구에도 정책이 적용된다.
 

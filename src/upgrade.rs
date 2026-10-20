@@ -36,7 +36,7 @@ pub fn author(db: &Database, p: &Product) -> Result<()> {
             T("EMB_State"),
             T(&state_guid),
             T("INSTALLDIR"),
-            I(if p.architecture == "x64" { 260 } else { 4 }),
+            I(if p.architecture != "x86" { 260 } else { 4 }),
             T("EMB_InstallLocation"),
         ],
     )?;
@@ -70,7 +70,7 @@ pub fn author(db: &Database, p: &Product) -> Result<()> {
             I(2),
             T(&state_key),
             T("InstallDir"),
-            I(if p.architecture == "x64" { 18 } else { 2 }),
+            I(if p.architecture != "x86" { 18 } else { 2 }),
         ],
     )?;
     db.insert(
@@ -191,7 +191,7 @@ pub fn author(db: &Database, p: &Product) -> Result<()> {
             I(2),
             T(&state_key),
             T("Layout"),
-            I(if p.architecture == "x64" { 18 } else { 2 }),
+            I(if p.architecture != "x86" { 18 } else { 2 }),
         ],
     )?;
     db.insert("CustomAction",&["Action","Type","Target"],&[T("EmbBlockLayoutChange"),I(19),T("기존 패키지의 업그레이드 정보가 없거나 아키텍처·설치 경로 구성이 변경되었습니다. 기존 버전을 제거한 뒤 설치하세요.")])?;

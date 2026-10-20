@@ -1,4 +1,4 @@
-//! Self-contained Windows Installer embedded UI. Built for x86 and x64 without a web runtime.
+//! Self-contained Windows Installer embedded UI. Built for x86, x64 and ARM64 without a web runtime.
 #![allow(non_snake_case)]
 mod quick_policy;
 use std::{

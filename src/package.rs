@@ -88,6 +88,13 @@ pub fn build_selected(
     spec: &BuildSpec<'_>,
     selected: Option<Vec<crate::payload::File>>,
 ) -> Result<()> {
+    build_selected_signed(spec, selected, None)
+}
+pub fn build_selected_signed(
+    spec: &BuildSpec<'_>,
+    selected: Option<Vec<crate::payload::File>>,
+    signing: Option<(&crate::signing::Signing, &Path, Option<&str>)>,
+) -> Result<()> {
     let BuildSpec {
         source,
         output,
@@ -182,7 +189,9 @@ pub fn build_selected(
     let db = Database::create(&staged)?;
     schema(&db)?;
     if spec.quick_msi {
-        let bytes = if product.architecture == "x64" {
+        let bytes = if product.architecture == "arm64" {
+            include_bytes!(concat!(env!("OUT_DIR"), "/emb-quick-arm64.dll")).as_slice()
+        } else if product.architecture == "x64" {
             include_bytes!(concat!(env!("OUT_DIR"), "/emb-quick-x64.dll")).as_slice()
         } else {
             include_bytes!(concat!(env!("OUT_DIR"), "/emb-quick-x86.dll")).as_slice()
@@ -221,7 +230,7 @@ pub fn build_selected(
             &[T("REINSTALLMODE"), T(product.existing_files.mode())],
         )?;
     }
-    let program_files = if product.architecture == "x64" {
+    let program_files = if product.architecture != "x86" {
         "ProgramFiles64Folder"
     } else {
         "ProgramFilesFolder"
@@ -230,7 +239,7 @@ pub fn build_selected(
         ("TARGETDIR", None, "SourceDir"),
         (program_files, Some("TARGETDIR"), "."),
         (
-            if product.architecture == "x64" {
+            if product.architecture != "x86" {
                 "System64Folder"
             } else {
                 "SystemFolder"
@@ -256,12 +265,12 @@ pub fn build_selected(
                 .components()
                 .next()
                 .and_then(|c| c.as_os_str().to_str())
-                .and_then(|s| crate::payload::root_directory(s, product.architecture == "x64"))
+                .and_then(|s| crate::payload::root_directory(s, product.architecture != "x86"))
                 == Some(id)
         }) && !product.shortcuts.iter().any(|s| {
             s.working_directory
                 .to_str()
-                .and_then(|v| crate::payload::root_directory(v, product.architecture == "x64"))
+                .and_then(|v| crate::payload::root_directory(v, product.architecture != "x86"))
                 == Some(id)
         }) {
             continue;
@@ -336,7 +345,7 @@ pub fn build_selected(
             I(0),
         ],
     )?;
-    author_payload(&db, &files, &sizes, product.architecture == "x64")?;
+    author_payload(&db, &files, &sizes, product.architecture != "x86")?;
     crate::registry::author(&db, product)?;
     crate::shortcut::author(&db, product, &files)?;
     for (index, cab) in cabinets.iter().enumerate() {
@@ -430,12 +439,21 @@ pub fn build_selected(
     }
     db.summary(
         &package_code,
-        product.architecture == "x64",
-        if spec.quick_msi { 450 } else { 200 },
+        &product.architecture,
+        if product.architecture == "arm64" {
+            500
+        } else if spec.quick_msi {
+            450
+        } else {
+            200
+        },
     )?;
     db.commit()?;
     drop(db);
     verify(&staged)?;
+    if let Some((config, base, password)) = signing {
+        crate::signing::sign(&staged, config, base, password)?;
+    }
     let target = parent.join(output.file_name().ok_or("missing output filename")?);
     let cabinet_names: Vec<_> = cabinets.iter().map(|c| c.name.clone()).collect();
     publish_set(&staged, &target, storage, &cabinet_names)?;

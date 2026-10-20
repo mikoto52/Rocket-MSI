@@ -14,7 +14,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.is_empty() || (args.len() == 1 && (args[0] == "--help" || args[0] == "-h")) {
         println!(
-            "RocketMsiBuilderCli\n\nUsage:\n  RocketMsiBuilderCli.exe build <project.embproj>\n  RocketMsiBuilderCli.exe <project.embproj>\n  RocketMsiBuilderCli.exe validate <project.embproj>\n  RocketMsiBuilderCli.exe init <new-project.embproj>\n  RocketMsiBuilderCli.exe normalize <project.embproj> <new.embproj>\n  RocketMsiBuilderCli.exe verify <package.msi>\n\nBuilds MSI without installing it. Relative paths are based on the project file.\nExit code: 0 on success, 1 on error. Existing output files are not overwritten."
+            "RocketMsiBuilderCli\n\nUsage:\n  RocketMsiBuilderCli.exe build <project.embproj>\n  RocketMsiBuilderCli.exe <project.embproj>\n  RocketMsiBuilderCli.exe validate <project.embproj>\n  RocketMsiBuilderCli.exe init <new-project.embproj>\n  RocketMsiBuilderCli.exe normalize <project.embproj> <new.embproj>\n  RocketMsiBuilderCli.exe verify <package.msi>\n  RocketMsiBuilderCli.exe verify-signature <package.msi>\n\nBuilds MSI without installing it. Relative paths are based on the project file.\nExit code: 0 on success, 1 on error. Existing output files are not overwritten."
         );
         return Ok(());
     }
@@ -52,6 +52,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args.len() == 2 && args[0] == "verify" {
         return package::verify(std::path::Path::new(&args[1]));
+    }
+    if args.len() == 2 && args[0] == "verify-signature" {
+        emb_msi::signing::verify(std::path::Path::new(&args[1]))?;
+        println!("MSI Authenticode signature is valid");
+        return Ok(());
     }
     if args.len() < 3 || args[0] != "build" {
         return Err(

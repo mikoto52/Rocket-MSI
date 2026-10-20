@@ -198,7 +198,9 @@ pub fn author(db: &Database, p: &Product, files: &[payload::File], work: &Path) 
     if !p.actions.any() {
         return Ok(());
     }
-    let bytes: &[u8] = if p.architecture == "x64" {
+    let bytes: &[u8] = if p.architecture == "arm64" {
+        include_bytes!(concat!(env!("OUT_DIR"), "/emb-actions-arm64.dll"))
+    } else if p.architecture == "x64" {
         include_bytes!(concat!(env!("OUT_DIR"), "/emb-actions-x64.dll"))
     } else {
         include_bytes!(concat!(env!("OUT_DIR"), "/emb-actions-x86.dll"))

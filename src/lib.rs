@@ -26,4 +26,6 @@ pub mod registry;
 #[cfg(windows)]
 pub mod shortcut;
 #[cfg(windows)]
+pub mod signing;
+#[cfg(windows)]
 pub mod upgrade;

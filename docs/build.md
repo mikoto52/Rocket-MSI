@@ -11,12 +11,12 @@
 - Git
 - Rust 및 Cargo: 기본 호스트 `x86_64-pc-windows-msvc`
 - Visual Studio 또는 Visual Studio Build Tools의 **Desktop development with C++** 구성 요소
-  - MSVC x86/x64 컴파일러와 링커
+  - MSVC x86/x64/ARM64 컴파일러와 링커
   - Windows SDK: 실행 파일 아이콘을 컴파일하는 `rc.exe`도 필요합니다.
 - Windows PowerShell 5.1 이상
 - GUI 실행용 Microsoft Edge WebView2 Runtime
 
-CLI 실행에는 WebView2가 필요하지 않습니다. 생성된 MSI는 프로젝트 설정에 따라 x86 또는 x64를 대상으로 합니다. 빌더 실행 파일 자체의 아키텍처와 MSI 대상 아키텍처는 구분합니다.
+CLI 실행에는 WebView2가 필요하지 않습니다. 생성된 MSI는 프로젝트 설정에 따라 x86, x64 또는 ARM64를 대상으로 합니다. 빌더 실행 파일 자체의 아키텍처와 MSI 대상 아키텍처는 구분합니다.
 
 CAB는 Windows의 `makecab.exe`를 사용합니다. WiX, Node.js, npm은 이 빌드에 필요하지 않습니다. 프런트엔드는 로컬 HTML/CSS/JavaScript이며 Tauri 번들러는 비활성화되어 있습니다.
 
@@ -34,13 +34,13 @@ cd InstallEmbly
 ```powershell
 rustc --version
 cargo --version
-rustup target add i686-pc-windows-msvc x86_64-pc-windows-msvc
+rustup target add i686-pc-windows-msvc x86_64-pc-windows-msvc aarch64-pc-windows-msvc
 
 cargo fetch --locked
 cargo fetch --manifest-path builder/Cargo.toml --locked
 ```
 
-첫 의존성 다운로드에는 네트워크가 필요합니다. 이후 아래 빌드 스크립트는 캐시와 Cargo.lock을 사용해 `--offline`으로 빌드합니다. 두 Rust 타깃은 x86/x64 MSI 실행 도우미 DLL을 함께 만들기 위해 필요합니다.
+첫 의존성 다운로드에는 네트워크가 필요합니다. 이후 아래 빌드 스크립트는 캐시와 Cargo.lock을 사용해 `--offline`으로 빌드합니다. 세 Rust 타깃은 x86/x64/ARM64 MSI 실행 도우미·Quick MSI DLL을 함께 만들기 위해 필요합니다.
 
 ## 3. GUI·CLI 배포용 빌드
 
@@ -62,6 +62,8 @@ powershell -NoProfile -File scripts/build-builder.ps1
 배포할 때는 라이선스·고지 파일도 함께 포함합니다. Windows의 makecab이나 WebView2를 이 스크립트에서 복사·설치하지는 않습니다. GUI 자체의 설치용 MSI/Setup.exe는 아직 만들지 않습니다.
 
 개별 컴파일 명령은 아래와 같습니다. 배포 파일명 정리와 라이선스 수집까지 하려면 위 스크립트를 사용하세요.
+
+릴리즈처럼 별도 출력 폴더가 필요하면 `scripts/build-builder.ps1 -OutputDirectory dist/releases/0.3.0/portable`로 지정할 수 있습니다. 기본 출력은 계속 `dist/builder`입니다. 실행 중인 빌더를 덮어쓰지 않고 별도 폴더로 빌드할 때도 사용합니다.
 
 ```powershell
 cargo build --release --offline
@@ -148,7 +150,7 @@ powershell -NoProfile -File scripts/build-builder.ps1
 | 증상 | 확인할 내용 |
 |---|---|
 | offline에서 패키지를 찾지 못함 | 두 Cargo.toml에 대해 `cargo fetch --locked`를 먼저 실행했는지 확인 |
-| i686 타깃/실행 도우미 DLL 빌드 실패 | Rust 두 타깃과 MSVC x86/x64 빌드 도구 설치 확인 |
+| i686 타깃/실행 도우미 DLL 빌드 실패 | Rust 세 타깃과 MSVC x86/x64/ARM64 빌드 도구 설치 확인 |
 | link.exe / rc.exe를 찾지 못함 | Visual C++ 빌드 도구 및 Windows SDK 설치 확인; 필요하면 VS의 Developer PowerShell에서 실행 |
 | EXE 복사 시 접근 거부 | 실행 중인 빌더를 닫고 다시 빌드 |
 | GUI 실행 시 WebView2 오류 | WebView2 Runtime 설치 상태 확인 |

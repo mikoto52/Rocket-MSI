@@ -139,7 +139,7 @@ pub fn validate(entries: &[Entry], p: &Product) -> Result<()> {
 pub fn validate_payload(entries: &[Entry], files: &[payload::File], p: &Product) -> Result<()> {
     for e in entries {
         e.resolve(files, p)?;
-        e.working_directory_id(files, p.architecture == "x64")?;
+        e.working_directory_id(files, p.architecture != "x86")?;
     }
     Ok(())
 }
@@ -190,7 +190,7 @@ pub fn author(db: &Database, p: &Product, files: &[payload::File]) -> Result<()>
         let args = e.arguments()?;
         let name = payload::msi_name(Path::new(&e.name))?;
         let target = format!("[#{}]", file.id);
-        let wd = e.working_directory_id(files, p.architecture == "x64")?;
+        let wd = e.working_directory_id(files, p.architecture != "x86")?;
         let id = format!("S_{}", e.id);
         db.insert(
             "Shortcut",

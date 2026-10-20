@@ -18,6 +18,7 @@ fn main() {
     for (arch, target) in [
         ("x86", "i686-pc-windows-msvc"),
         ("x64", "x86_64-pc-windows-msvc"),
+        ("arm64", "aarch64-pc-windows-msvc"),
     ] {
         let quick_status = Command::new(env::var_os("RUSTC").unwrap())
             .args([
@@ -63,7 +64,7 @@ fn main() {
             .expect("run rustc for MSI action runtime");
         assert!(
             status.success(),
-            "Cannot build {target} action runtime. Install both Rust MSVC targets and x86/x64 Visual C++ build tools."
+            "Cannot build {target} action runtime. Install Rust MSVC targets and x86/x64/ARM64 Visual C++ build tools."
         );
     }
 }

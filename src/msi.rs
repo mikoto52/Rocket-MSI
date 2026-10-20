@@ -503,7 +503,12 @@ impl Database {
         )?;
         check(unsafe { MsiViewExecute(view.0, record.0) }, "insert stream")
     }
-    pub fn summary(&self, package_code: &str, x64: bool, minimum_installer: i32) -> Result<()> {
+    pub fn summary(
+        &self,
+        package_code: &str,
+        architecture: &str,
+        minimum_installer: i32,
+    ) -> Result<()> {
         let mut h = 0;
         check(
             unsafe { MsiGetSummaryInformationW(self.0.0, ptr::null(), 10, &mut h) },
@@ -520,7 +525,14 @@ impl Database {
             (2, "Installation Database"),
             (3, "Express MSI Builder prototype"),
             (4, "Express MSI Builder"),
-            (7, if x64 { "x64;1042" } else { "Intel;1042" }),
+            (
+                7,
+                match architecture {
+                    "arm64" => "Arm64;1042",
+                    "x64" => "x64;1042",
+                    _ => "Intel;1042",
+                },
+            ),
             (9, package_code),
             (18, "Express MSI Builder"),
         ] {

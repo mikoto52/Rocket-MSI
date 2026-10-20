@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExpressMsiBuilderProject schemaVersion="1">
+  <Product name="Rocket MSI ARM64 Demo" manufacturer="Rocket MSI" version="1.0.0" productCode="{69A62364-62C1-4D5E-9F98-54CF139A2601}" upgradeCode="{69A62364-62C1-4D5E-9F98-54CF139A2602}" architecture="arm64" scope="perMachine" />
+  <Files>
+    <File source="payload/hello.txt" target="{InstallDestination}\hello.txt" />
+  </Files>
+  <Installation directory="{ProgramFiles}\Rocket MSI\ARM64 Demo" allowDirectoryChange="true" existingFiles="default" />
+  <Upgrade enabled="true" />
+  <UI mode="wizard"><BrandingText>Rocket MSI</BrandingText></UI>
+  <Actions>
+    <Install>
+      <Action id="arm64_probe" name="ARM64 runtime probe" enabled="true" hideWindow="true" failurePolicy="stop" timeoutSeconds="30" timing="afterFiles">
+        <Executable kind="targetPath" path="{SystemDir}\cmd.exe" />
+        <Arguments><Argument>/c</Argument><Argument>exit /b 0</Argument></Arguments>
+      </Action>
+    </Install>
+  </Actions>
+  <Build outputDirectory="../dist/arm64-demo/wizard" outputFile="Setup.msi"><Cabinet storage="embedded" split="none" /></Build>
+</ExpressMsiBuilderProject>

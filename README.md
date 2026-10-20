@@ -2,13 +2,14 @@
 
 Rocket MSI는 Windows Installer 패키지(`.msi`)를 만드는 **Windows 전용 설치 빌더**입니다. Rust로 구현한 자체 MSI 엔진과 Tauri 2 기반 GUI를 사용하며, WiX에 의존하지 않습니다. 프로젝트는 XML 기반 **`.embproj`** 파일로 저장합니다.
 
-현재 버전은 **0.2.2**이며 기능 구현과 검증을 진행하는 개발 버전입니다. 프로젝트 소스코드는 **MIT 라이선스**로 배포합니다.
+현재 버전은 **0.3.0**이며 기능 구현과 검증을 진행하는 개발 버전입니다. 프로젝트 소스코드는 **MIT 라이선스**로 배포합니다.
 
 ## 주요 기능
 
 | 기능 | 현재 지원 범위 |
 |---|---|
-| 제품 설정 | 제품명·제작사·버전, x86/x64, ProductCode·UpgradeCode 관리 |
+| 제품 설정 | 제품명·제작사·버전, x86/x64/ARM64, ProductCode·UpgradeCode 관리 |
+| MSI 전자서명 | PFX 또는 Windows 인증서 저장소, SHA-256 서명·RFC 3161 타임스탬프·서명 검증 |
 | 설치 파일 | 펼치기/접기 트리, 파일 다중 선택, 디렉터리 전체 가져오기, 대상 폴더별 배치·이동·삭제 |
 | 설치 화면 | 한글 마법사, 환영·완료·중단의 좌측 이미지, 배너 화면, 전체 문구 BrandingText, TXT/RTF 사용권 계약 동의 |
 | Quick MSI 첫 단위 | Embedded UI DLL 포함, 간편 설치·진행·완료·유지보수 화면, 설치 후 실행 선택. 실제 설치 검증 진행 중 |
@@ -21,7 +22,7 @@ Rocket MSI는 Windows Installer 패키지(`.msi`)를 만드는 **Windows 전용 
 | CAB | MSI 내장 또는 외부 저장, 크기별 Data1.cab·Data2.cab 분할, makecab 창 숨김 실행 |
 | 빌드 도구 | GUI 및 독립 콘솔 CLI, 프로젝트 검사·빌드·MSI 검증 |
 
-설치 파일의 대상 루트는 **InstallDestination, ProgramFiles, ProgramData, WindowsDir, SystemDir, SystemDrive, TempDir**입니다. ProgramFiles·SystemDir은 패키지의 x86/x64에 맞게 해석합니다.
+설치 파일의 대상 루트는 **InstallDestination, ProgramFiles, ProgramData, WindowsDir, SystemDir, SystemDrive, TempDir**입니다. ProgramFiles·SystemDir은 패키지의 x86/x64/ARM64에 맞게 해석합니다.
 
 프로그램 경로·작업 폴더·레지스트리 문자열 등에 경로 및 제품 정보 변수를 사용할 수 있습니다. 지원하는 입력란 옆 **`<` 버튼**을 누르면 변수 메뉴가 열립니다. 바로가기의 기본 대상은 `{InstallDestination}\file.exe`입니다. 기존 프로젝트의 `{InstallDir}` 변수는 열 때 `{InstallDestination}`으로 변환합니다.
 
@@ -124,6 +125,10 @@ powershell -NoProfile -File scripts/test-builder-cli.ps1
 Rocket MSI는 무료 배포와 소스 공개를 목표로 개발합니다. 프로젝트 소스코드는 [MIT 라이선스](LICENSE)로 배포합니다. 외부 의존성의 라이선스 안내는 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)와 [빌더 의존성 안내](builder/THIRD-PARTY-NOTICES.md)를 참고하세요.
 
 ## 관련 문서
+
+- [0.3.0 릴리즈 노트](docs/releases/0.3.0.md)
+- [ARM64 패키지 생성](docs/arm64.md)
+- [MSI 전자서명](docs/signing.md)
 
 - [빌드 안내](docs/build.md)
 - [빌더 사용 안내](docs/builder-gui.md)

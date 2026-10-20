@@ -103,6 +103,9 @@ async fn pick_path(kind: String) -> Result<Option<String>, String> {
             "folder" => dialog.pick_folder(),
             "license" => dialog.add_filter("이용약관", &["txt", "rtf"]).pick_file(),
             "exe" => dialog.add_filter("실행 파일", &["exe"]).pick_file(),
+            "pfx" => dialog
+                .add_filter("서명 인증서", &["pfx", "p12"])
+                .pick_file(),
             _ => return Err("지원하지 않는 선택 항목입니다.".into()),
         };
         Ok(result.map(|p| p.display().to_string()))
@@ -267,6 +270,11 @@ async fn save_project(
             .license
             .as_ref()
             .map(|v| base.join(v).display().to_string());
+        if let Some(signing) = &mut p.signing
+            && !signing.pfx_file.is_empty()
+        {
+            signing.pfx_file = base.join(&signing.pfx_file).display().to_string();
+        }
     }
     let previous = old.as_ref().filter(|d| d.0 == path).map(|d| d.1.as_str());
     let text = save_atomic(&p, &path, previous)?;
@@ -297,6 +305,7 @@ fn validate_project(xml_text: String) -> Result<String, String> {
 async fn build_project(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
+    pfx_password: Option<String>,
 ) -> Result<String, String> {
     if state.building.swap(true, Ordering::SeqCst) {
         return Err("이미 빌드 중입니다.".into());
@@ -327,7 +336,16 @@ async fn build_project(
             )
             .ok();
         let p = Project::load(&path).map_err(|e| e.to_string())?;
-        p.build(&path).map_err(|e| e.to_string())
+        if p.signing.is_some() {
+            worker
+                .emit(
+                    "build-progress",
+                    "MSI 생성 후 SHA-256 서명과 검증을 진행합니다.",
+                )
+                .ok();
+        }
+        p.build_with_password(&path, pfx_password.as_deref())
+            .map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -348,6 +366,21 @@ async fn build_project(
             Err(e)
         }
     }
+}
+#[tauri::command]
+async fn list_certificates(store_location: String) -> Result<serde_json::Value, String> {
+    let store = match store_location.as_str() {
+        "currentUser" => "CurrentUser",
+        "localMachine" => "LocalMachine",
+        _ => return Err("인증서 저장소가 올바르지 않습니다.".into()),
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::os::windows::process::CommandExt;
+        let script = format!(r#"$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $now=Get-Date; $items=@(Get-ChildItem 'Cert:\{store}\My' | Where-Object {{ $_.HasPrivateKey -and $_.NotBefore -le $now -and $_.NotAfter -gt $now -and ($_.EnhancedKeyUsageList.Count -eq 0 -or ($_.EnhancedKeyUsageList.ObjectId -contains '1.3.6.1.5.5.7.3.3')) }} | ForEach-Object {{ [PSCustomObject]@{{ thumbprint=$_.Thumbprint; subject=$_.Subject; expires=$_.NotAfter.ToString('yyyy-MM-dd') }} }}); ConvertTo-Json -InputObject $items -Compress"#);
+        let output = std::process::Command::new("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", &script]).creation_flags(0x08000000).output().map_err(|_| "인증서 저장소를 읽을 수 없습니다.")?;
+        if !output.status.success() { return Err("인증서 저장소를 읽을 수 없습니다.".into()); }
+        serde_json::from_slice(&output.stdout).map_err(|_| "인증서 목록을 읽을 수 없습니다.".into())
+    }).await.map_err(|e| e.to_string())?
 }
 #[tauri::command]
 fn open_output(state: State<AppState>) -> Result<(), String> {
@@ -382,6 +415,7 @@ fn main() {
             save_project,
             validate_project,
             build_project,
+            list_certificates,
             open_output
         ])
         .run(tauri::generate_context!())

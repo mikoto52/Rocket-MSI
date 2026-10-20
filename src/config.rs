@@ -110,8 +110,8 @@ impl Product {
         if p == u {
             return Err("ProductCode and UpgradeCode must differ".into());
         }
-        if !matches!(self.architecture.as_str(), "x86" | "x64") {
-            return Err("architecture must be x86 or x64".into());
+        if !matches!(self.architecture.as_str(), "x86" | "x64" | "arm64") {
+            return Err("architecture must be x86, x64, or arm64".into());
         }
         self.install_parts()?;
         crate::registry::validate(&self.registry, self)?;

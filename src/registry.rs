@@ -69,7 +69,7 @@ pub fn template(s: &str, p: &Product, runtime: bool) -> Result<String> {
                         "ProgramData" => "CommonAppDataFolder",
                         "WindowsDir" => "WindowsFolder",
                         "SystemDir" => {
-                            if p.architecture == "x64" {
+                            if p.architecture != "x86" {
                                 "System64Folder"
                             } else {
                                 "SystemFolder"
@@ -78,7 +78,7 @@ pub fn template(s: &str, p: &Product, runtime: bool) -> Result<String> {
                         "SystemDrive" => "WindowsVolume",
                         "TempDir" => "TempFolder",
                         _ => {
-                            if p.architecture == "x64" {
+                            if p.architecture != "x86" {
                                 "ProgramFiles64Folder"
                             } else {
                                 "ProgramFilesFolder"
@@ -126,7 +126,7 @@ fn binary(s: &str) -> Result<String> {
 }
 impl Entry {
     pub fn is64(&self, p: &Product) -> bool {
-        self.view == "registry64" || (self.view == "auto" && p.architecture == "x64")
+        self.view == "registry64" || (self.view == "auto" && p.architecture != "x86")
     }
     pub fn value(&self, p: &Product) -> Result<String> {
         let value = match self.kind.as_str() {

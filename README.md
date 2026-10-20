@@ -4,7 +4,35 @@ Rocket MSI는 Windows Installer 패키지(`.msi`)를 만드는 **Windows 전용 
 
 현재 버전은 **0.3.1**이며 기능 구현과 검증을 진행하는 개발 버전입니다. 프로젝트 소스코드는 **MIT 라이선스**로 배포합니다.
 
-현재 개발 소스의 MSI 서명은 Windows 기본 API를 사용하여 SDK·SignTool 설치가 필요하지 않습니다. 이미 공개된 0.3.0 릴리즈는 SignTool 기반이며, 전환 내용은 다음 배포에 반영됩니다.
+0.3.1부터 MSI 서명은 Windows 기본 API를 사용하여 SDK·SignTool 설치가 필요하지 않습니다. PFX 파일 또는 Windows 인증서 저장소의 인증서로 서명할 수 있습니다.
+
+## 화면 둘러보기
+
+### 빌더 작업 공간
+
+제품 정보부터 설치 파일, 설치 화면, 레지스트리, 바로가기와 실행 목록까지 한 프로젝트에서 설정하고 MSI로 빌드합니다.
+
+<p align="center">
+  <img src="docs/images/builder-workspace.png" alt="Rocket MSI 빌더의 제품 정보 설정 화면" width="1100" />
+</p>
+
+### Quick MSI
+
+제품 정보와 설치 버튼을 중심으로 구성한 간결한 설치 화면입니다. Windows 다크 모드를 지원하며 이용약관 URL과 프로그램 정보 창을 제공할 수 있습니다.
+
+<p align="center">
+  <img src="docs/images/quick-msi.png" alt="다크 모드의 Quick MSI 설치 첫 화면과 이용약관 안내" width="820" />
+</p>
+
+### Wizard MSI
+
+환영 화면부터 약관 동의, 설치 폴더 선택, 진행과 완료까지 단계별로 안내하는 마법사입니다. 아래는 기본 브랜딩을 적용한 환영 화면입니다.
+
+<p align="center">
+  <img src="docs/images/wizard-msi.png" alt="좌측 큐브 이미지와 환영 문구가 있는 Wizard MSI 첫 화면" width="820" />
+</p>
+
+위 이미지는 0.3.1 빌더와 샘플 MSI의 실제 화면입니다. 설치 화면 방식은 빌더의 **설치 화면** 설정에서 선택할 수 있습니다.
 
 ## 주요 기능
 

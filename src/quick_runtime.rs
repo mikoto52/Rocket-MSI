@@ -914,9 +914,9 @@ unsafe fn paint(w: H, u: &Window) {
                     "설치는 이용약관에 동의함을 의미합니다.",
                     Rect {
                         left: s(60),
-                        top: r.bottom - s(39),
+                        top: r.bottom - s(38),
                         right: r.right - s(24),
-                        bottom: r.bottom - s(11),
+                        bottom: r.bottom - s(10),
                     },
                     u.color(rgb(85, 96, 113), rgb(225, 225, 225)),
                     0x24,

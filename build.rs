@@ -4,6 +4,7 @@ fn main() {
     println!("cargo:rerun-if-changed=src/action_protocol.rs");
     println!("cargo:rerun-if-changed=src/quick_runtime.rs");
     println!("cargo:rerun-if-changed=src/quick_policy.rs");
+    println!("cargo:rerun-if-changed=src/terms.rs");
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }

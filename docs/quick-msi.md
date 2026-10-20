@@ -1,6 +1,6 @@
 # Quick MSI 첫 단위
 
-2026-10-19 구현. Windows 10/11 대상의 별도 Rust UI DLL을 MSI의 `MsiEmbeddedUI` 테이블에 포함한다. MSI 파일 하나로 배포하며 WebView2나 별도 Setup.exe를 요구하지 않는다. x86/x64 패키지에는 해당 아키텍처 DLL을 넣는다. 기존 마법사는 기본값으로 유지한다.
+2026-10-19 구현. Windows 10/11 대상의 별도 Rust UI DLL을 MSI의 `MsiEmbeddedUI` 테이블에 포함한다. MSI 파일 하나로 배포하며 WebView2나 별도 Setup.exe를 요구하지 않는다. x86/x64/ARM64 패키지에는 해당 아키텍처 DLL을 넣는다. 기존 마법사는 기본값으로 유지한다.
 
 ## 설정
 
@@ -9,6 +9,7 @@
 ```xml
 <UI mode="quick">
   <BrandingText>Rocket MSI</BrandingText>
+  <Terms url="https://example.com/terms" />
   <FinishLaunch file="DemoLaunch.exe">
     <Arguments>
       <Argument>first argument</Argument>
@@ -18,7 +19,15 @@
 </UI>
 ```
 
-`FinishLaunch`는 선택 사항이다. 대상은 설치 파일 목록에 포함된 EXE여야 한다. 설치 경로는 프로젝트의 기본 경로 또는 MSI 속성 설정을 사용한다. 첫 단위 UI에는 경로 편집·제품 아이콘 편집·사용권 계약 표시가 없다. License를 함께 지정하면 검증·빌드를 차단한다. 파일·레지스트리·바로가기·업그레이드 등은 기존 MSI 엔진을 공유한다.
+`FinishLaunch`와 `Terms`는 선택 사항이다. 실행 대상은 설치 파일 목록에 포함된 EXE여야 한다. 설치 경로는 프로젝트의 기본 경로 또는 MSI 속성 설정을 사용한다. Quick MSI는 약관 URL을 브라우저로 여는 방식을 지원하며 TXT/RTF 본문 표시는 지원하지 않는다. License를 함께 지정하면 검증·빌드를 차단한다. 파일·레지스트리·바로가기·업그레이드 등은 기존 MSI 엔진을 공유한다.
+
+빌더의 **설치 화면 → 이용약관 URL (Quick MSI)**에 HTTP(S) 주소를 입력한다. URL을 지정하면 신규 설치 첫 화면 하단에 ⓘ 버튼과 “설치는 이용약관에 동의함을 의미합니다.”를 표시한다. URL이 없으면 정보 버튼만 표시한다. 이 안내는 체크박스나 동의 이력을 생성하지 않는다.
+
+ⓘ 버튼은 설치·복구·제거 진행 및 완료 화면에서도 유지한다. 누르면 제품명, 버전, 이용약관 링크, `Built by Rocket MSI`를 표시하는 별도 **비모달 About 창**이 열린다. 부모 창을 비활성화하거나 메시지 루프를 중단하지 않으며 설치 진행·완료와 독립적으로 동작한다. 재차 누르면 기존 About 창을 앞으로 가져온다. About은 메인과 같은 폰트·다크 모드·라운드 버튼·DWM 프레임을 사용하며 닫기·Esc는 About만 닫는다. 설치 창을 종료하면 소유된 About 창도 함께 종료한다.
+
+URL은 프로젝트 검증과 UI 실행 시 HTTP(S) 형식인지 확인하며 다른 URI 스킴, 사용자 정보가 든 주소, 공백·제어문자는 거부한다. 링크는 사용자가 누를 때만 기본 브라우저에서 열고 설치 도중 자동으로 요청하지 않는다. URL이 없는 About 창은 링크를 생략한다. 예제는 `examples/QuickTermsDemo.embproj`를 참고한다.
+
+설치 없는 미리보기의 `progress` 모드는 진행률을 움직인 뒤 완료 화면으로 바뀐다. `progress-about` 모드는 About을 처음부터 열고 같은 동작을 수행해 창이 비모달임을 확인한다. 미리보기의 약관 링크는 브라우저를 열지 않고 URL을 안내하는 창만 표시한다.
 
 ## 화면과 동작
 

@@ -21,6 +21,7 @@ pub struct Project {
     pub license: Option<String>,
     pub branding: String,
     pub quick_msi: bool,
+    pub terms_url: Option<String>,
     pub storage: CabStorage,
     pub cab_limit: Option<u64>,
     pub launch: Option<Launch>,
@@ -79,6 +80,7 @@ mod tests {
             let mut p = Project::new()?;
             p.product.architecture = arch.into();
             p.quick_msi = true;
+            p.terms_url = Some("https://example.test/terms?product=demo&lang=ko".into());
             p.source = fs::canonicalize("examples/payload")?.display().to_string();
             p.files = Some(vec![(
                 t.0.join("probe.exe").display().to_string(),
@@ -98,8 +100,16 @@ mod tests {
             p.save_new(&path)?;
             let q = Project::load(&path)?;
             assert!(q.quick_msi);
+            assert_eq!(q.terms_url, p.terms_url);
             let output = q.build(&path)?;
             let db = msi::Database::read(&output)?;
+            assert_eq!(
+                db.query(
+                    "SELECT `Value` FROM `Property` WHERE `Property` = 'EMB_QUICK_TERMS_URL'",
+                    1
+                )?[0][0],
+                p.terms_url.as_deref().unwrap()
+            );
             assert_eq!(
                 db.query(
                     "SELECT `FileName`,`Attributes`,`MessageFilter` FROM `MsiEmbeddedUI`",
@@ -1135,6 +1145,7 @@ impl Project {
             license: None,
             branding: "Rocket MSI".into(),
             quick_msi: false,
+            terms_url: None,
             storage: CabStorage::Embedded,
             cab_limit: None,
             launch: None,
@@ -1244,6 +1255,7 @@ impl Project {
             license: None,
             branding: "Rocket MSI".into(),
             quick_msi: false,
+            terms_url: None,
             storage: CabStorage::Embedded,
             cab_limit: None,
             launch: None,
@@ -1327,7 +1339,7 @@ impl Project {
         if let Some(ui) = root.optional("UI")? {
             ui.check(
                 &["mode"],
-                &["License", "BrandingText", "FinishLaunch"],
+                &["License", "BrandingText", "FinishLaunch", "Terms"],
                 false,
             )?;
             result.quick_msi = match ui.attrs.get("mode").map(String::as_str).unwrap_or("wizard") {
@@ -1335,6 +1347,13 @@ impl Project {
                 "quick" => true,
                 _ => return Err("UI.mode must be wizard or quick".into()),
             };
+            if let Some(n) = ui.optional("Terms")? {
+                n.check(&["url"], &[], false)?;
+                let url = n.attr("url")?;
+                if !url.is_empty() {
+                    result.terms_url = Some(url.into());
+                }
+            }
             if let Some(n) = ui.optional("License")? {
                 n.check(&["file"], &[], false)?;
                 result.license = Some(n.attr("file")?.into());
@@ -1541,6 +1560,15 @@ impl Project {
     }
     pub fn validate(&self) -> Result<()> {
         self.product.validate()?;
+        if self
+            .terms_url
+            .as_deref()
+            .is_some_and(|url| !crate::terms::valid_url(url))
+        {
+            return Err(
+                "UI.Terms.url must be an HTTP(S) URL without credentials or whitespace".into(),
+            );
+        }
         if let Some(signing) = &self.signing {
             signing.validate()?;
         }
@@ -1611,6 +1639,7 @@ impl Project {
                 launch: self.launch.as_ref(),
                 product: Some(&self.product),
                 quick_msi: self.quick_msi,
+                terms_url: self.terms_url.as_deref(),
             },
             selected,
             self.signing.as_ref().map(|config| (config, base, password)),
@@ -1782,6 +1811,10 @@ impl Project {
             )?;
             if let Some(file) = &self.license {
                 w.write(E::start_element("License").attr("file", file))?;
+                w.write(E::end_element())?;
+            }
+            if let Some(url) = &self.terms_url {
+                w.write(E::start_element("Terms").attr("url", url))?;
                 w.write(E::end_element())?;
             }
             w.write(E::start_element("BrandingText"))?;

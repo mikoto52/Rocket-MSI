@@ -1,4 +1,4 @@
-param([ValidateSet('ready','progress','complete','maintenance')][string]$Mode='ready')
+param([ValidateSet('ready','progress','progress-about','complete','maintenance')][string]$Mode='ready')
 # Design preview only. All buttons close or cancel the preview; no MSI runs.
 $ErrorActionPreference='Stop'
 $dll=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../dist/quick-demo/preview/embquick.dll'))

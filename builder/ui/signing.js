@@ -1,7 +1,7 @@
 'use strict';
 function signingPanel(){
  const p='Build/Signing',enabled=attr(p,'enabled','false')==='true',source=attr(p,'source','pfx');
- return card('MSI 전자서명','빌드 후 SHA-256으로 서명하고 검증합니다. Windows SDK SignTool이 필요합니다.',`<div class="grid">${check('MSI에 전자서명 적용',p,'enabled')}${enabled?field('인증서 방식',p,'source','',[['pfx','PFX 파일'],['store','Windows 인증서 저장소']],'wide')+(source==='pfx'?field('PFX 파일',p,'pfxFile','암호는 빌드할 때 입력하며 프로젝트에 저장하지 않습니다.',null,'wide browse'):field('인증서 저장소',p,'storeLocation','',[['currentUser','현재 사용자 · 개인'],['localMachine','로컬 컴퓨터 · 개인']],'wide')+field('인증서 지문 (SHA-1)',p,'thumbprint','',null,'wide')+'<button id="select-certificate" class="plain">인증서 선택…</button>')+field('타임스탬프 서버 (선택)',p,'timestampUrl','RFC 3161 HTTP(S) 주소. 비워두면 타임스탬프 없이 서명합니다.',null,'wide'):''}</div>`);
+ return card('MSI 전자서명','Windows 기본 API로 SHA-256 서명과 검증을 처리합니다. SDK 설치가 필요하지 않습니다.',`<div class="grid">${check('MSI에 전자서명 적용',p,'enabled')}${enabled?field('인증서 방식',p,'source','',[['pfx','PFX 파일'],['store','Windows 인증서 저장소']],'wide')+(source==='pfx'?field('PFX 파일',p,'pfxFile','암호는 빌드할 때 입력하며 프로젝트에 저장하지 않습니다.',null,'wide browse'):field('인증서 저장소',p,'storeLocation','',[['currentUser','현재 사용자 · 개인'],['localMachine','로컬 컴퓨터 · 개인']],'wide')+field('인증서 지문 (SHA-1)',p,'thumbprint','',null,'wide')+'<button id="select-certificate" class="plain">인증서 선택…</button>')+field('타임스탬프 서버 (선택)',p,'timestampUrl','RFC 3161 HTTP(S) 주소. 비워두면 타임스탬프 없이 서명합니다.',null,'wide'):''}</div>`);
 }
 function signingPassword(){
  return new Promise(resolve=>{

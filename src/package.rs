@@ -68,6 +68,7 @@ pub fn build_with_finish(
         launch,
         product: None,
         quick_msi: false,
+        terms_url: None,
     })
 }
 pub struct BuildSpec<'a> {
@@ -80,6 +81,7 @@ pub struct BuildSpec<'a> {
     pub launch: Option<&'a crate::finish::Launch>,
     pub product: Option<&'a crate::config::Product>,
     pub quick_msi: bool,
+    pub terms_url: Option<&'a str>,
 }
 pub fn build_configured(spec: &BuildSpec<'_>) -> Result<()> {
     build_selected(spec, None)
@@ -110,6 +112,12 @@ pub fn build_selected_signed(
         return Err("Quick MSI first unit does not yet support License; use UI mode=wizard".into());
     }
     let product = spec.product.unwrap_or(&fallback);
+    if spec
+        .terms_url
+        .is_some_and(|url| !crate::terms::valid_url(url))
+    {
+        return Err("Quick MSI terms must be an HTTP(S) URL".into());
+    }
     product.validate()?;
     if cab_limit == Some(0) {
         return Err("CAB size must be positive".into());
@@ -189,6 +197,13 @@ pub fn build_selected_signed(
     let db = Database::create(&staged)?;
     schema(&db)?;
     if spec.quick_msi {
+        if let Some(url) = spec.terms_url {
+            db.insert(
+                "Property",
+                &["Property", "Value"],
+                &[T("EMB_QUICK_TERMS_URL"), T(url)],
+            )?;
+        }
         let bytes = if product.architecture == "arm64" {
             include_bytes!(concat!(env!("OUT_DIR"), "/emb-quick-arm64.dll")).as_slice()
         } else if product.architecture == "x64" {

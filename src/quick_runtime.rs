@@ -1,6 +1,7 @@
 //! Self-contained Windows Installer embedded UI. Built for x86, x64 and ARM64 without a web runtime.
 #![allow(non_snake_case)]
 mod quick_policy;
+mod terms;
 use std::{
     ffi::c_void,
     ptr,
@@ -178,6 +179,10 @@ unsafe extern "system" {
     fn IsDialogMessageW(w: H, msg: *mut Msg) -> i32;
     fn SetFocus(w: H) -> H;
     fn GetFocus() -> H;
+    fn IsWindow(w: H) -> i32;
+    fn GetAncestor(w: H, flags: u32) -> H;
+    fn SetForegroundWindow(w: H) -> i32;
+    fn SetCursor(cursor: H) -> H;
     fn GetWindowRect(w: H, rect: *mut Rect) -> i32;
     fn GetSystemMetrics(index: i32) -> i32;
     fn GetParent(w: H) -> H;
@@ -188,6 +193,17 @@ unsafe extern "system" {
     fn SetWindowPos(w: H, after: H, x: i32, y: i32, cx: i32, cy: i32, flags: u32) -> i32;
     fn ScreenToClient(w: H, point: *mut Point) -> i32;
     fn CallWindowProcW(proc: isize, w: H, msg: u32, wp: usize, lp: isize) -> isize;
+}
+#[link(name = "shell32")]
+unsafe extern "system" {
+    fn ShellExecuteW(
+        w: H,
+        operation: *const u16,
+        file: *const u16,
+        parameters: *const u16,
+        directory: *const u16,
+        show: i32,
+    ) -> H;
 }
 // On 32-bit Windows these APIs are exported under their non-Ptr names.
 #[cfg(target_pointer_width = "32")]
@@ -370,6 +386,7 @@ struct Model {
     publisher: String,
     version: String,
     branding: String,
+    terms_url: String,
     installed: bool,
     action: Choice,
     phase: u8,
@@ -381,6 +398,7 @@ struct Model {
     step: i64,
     action_data: bool,
     preview: bool,
+    preview_about: bool,
     launch: Option<Launch>,
     launch_checked: bool,
     auto_attempted: bool,
@@ -393,6 +411,9 @@ struct Session {
 }
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 struct Window {
+    about: bool,
+    owner: H,
+    about_window: H,
     dark: bool,
     model: Arc<Mutex<Model>>,
     cancel: Arc<AtomicBool>,
@@ -402,11 +423,13 @@ struct Window {
     secondary: H,
     third: H,
     checkbox: H,
+    info: H,
     minimize: H,
     close: H,
     checkbox_proc: isize,
     minimize_proc: isize,
     close_proc: isize,
+    info_proc: isize,
     hover_caption: H,
     font: H,
     heading: H,
@@ -558,6 +581,19 @@ unsafe fn layout(w: H, u: &mut Window) {
         let mut r = Rect::default();
         GetClientRect(w, &mut r);
         let s = |n: i32| n * u.dpi / 96;
+        if u.about {
+            MoveWindow(
+                u.primary,
+                r.right - s(136),
+                r.bottom - s(64),
+                s(100),
+                s(36),
+                1,
+            );
+            MoveWindow(u.secondary, s(36), s(165), s(130), s(32), 1);
+            MoveWindow(u.close, r.right - s(46), 0, s(46), s(36), 1);
+            return;
+        }
         let (maintenance, phase) = {
             let m = u.model.lock().unwrap();
             (m.installed && m.phase == 0, m.phase)
@@ -594,6 +630,7 @@ unsafe fn layout(w: H, u: &mut Window) {
             1,
         );
         MoveWindow(u.checkbox, s(36), r.bottom - s(82), s(245), s(30), 1);
+        MoveWindow(u.info, s(24), r.bottom - s(36), s(28), s(28), 1);
         MoveWindow(u.close, r.right - s(46), 0, s(46), s(36), 1);
         MoveWindow(u.minimize, r.right - s(92), 0, s(46), s(36), 1);
     }
@@ -655,6 +692,7 @@ unsafe fn refresh(w: H, u: &mut Window) {
             );
             ShowWindow(u.third, if phase == 0 && installed { 5 } else { 0 });
             ShowWindow(u.checkbox, if phase == 0 && has_launch { 5 } else { 0 });
+            ShowWindow(u.info, 5);
             u.last_phase = phase;
             layout(w, u);
         }
@@ -697,6 +735,59 @@ unsafe fn paint(w: H, u: &Window) {
         fill(dc, r, u.background());
         let s = |n: i32| n * u.dpi / 96;
         let m = u.model.lock().unwrap();
+        if u.about {
+            text(
+                dc,
+                u.heading,
+                &m.name,
+                Rect {
+                    left: s(36),
+                    top: s(56),
+                    right: r.right - s(36),
+                    bottom: s(104),
+                },
+                u.foreground(),
+                0x10,
+            );
+            text(
+                dc,
+                u.font,
+                &format!("Version: {}", m.version),
+                Rect {
+                    left: s(36),
+                    top: s(112),
+                    right: r.right - s(36),
+                    bottom: s(140),
+                },
+                u.foreground(),
+                0,
+            );
+            text(
+                dc,
+                u.font,
+                "Built by Rocket MSI",
+                Rect {
+                    left: s(36),
+                    top: r.bottom - s(58),
+                    right: r.right - s(150),
+                    bottom: r.bottom - s(28),
+                },
+                u.color(rgb(100, 110, 125), rgb(185, 185, 185)),
+                0x24,
+            );
+            if buffered {
+                BitBlt(target, 0, 0, r.right, r.bottom, dc, 0, 0, 0x00cc0020);
+                SelectObject(buffer, old_bitmap);
+            }
+            if !bitmap.is_null() {
+                DeleteObject(bitmap);
+            }
+            if !buffer.is_null() {
+                DeleteDC(buffer);
+            }
+            EndPaint(w, &p);
+            return;
+        }
         let title = if m.phase == 2 {
             match m.result {
                 Some(0 | 3010 | 1641) => format!("{} {} 완료", m.name, m.action.label()),
@@ -815,19 +906,37 @@ unsafe fn paint(w: H, u: &Window) {
                 rgb(80, 82, 200),
             );
         }
-        text(
-            dc,
-            u.font,
-            &m.branding,
-            Rect {
-                left: s(36),
-                top: r.bottom - s(29),
-                right: r.right - s(36),
-                bottom: r.bottom - s(6),
-            },
-            rgb(132, 140, 153),
-            0,
-        );
+        if m.phase == 0 && !m.installed {
+            if !m.terms_url.is_empty() {
+                text(
+                    dc,
+                    u.font,
+                    "설치는 이용약관에 동의함을 의미합니다.",
+                    Rect {
+                        left: s(60),
+                        top: r.bottom - s(39),
+                        right: r.right - s(24),
+                        bottom: r.bottom - s(11),
+                    },
+                    u.color(rgb(85, 96, 113), rgb(225, 225, 225)),
+                    0x24,
+                );
+            }
+        } else {
+            text(
+                dc,
+                u.font,
+                &m.branding,
+                Rect {
+                    left: s(60),
+                    top: r.bottom - s(29),
+                    right: r.right - s(36),
+                    bottom: r.bottom - s(6),
+                },
+                rgb(132, 140, 153),
+                0,
+            );
+        }
         if buffered {
             BitBlt(target, 0, 0, r.right, r.bottom, dc, 0, 0, 0x00cc0020);
             SelectObject(buffer, old_bitmap);
@@ -867,6 +976,10 @@ unsafe extern "system" fn caption_proc(w: H, msg: u32, wp: usize, lp: isize) -> 
             return DefWindowProcW(w, msg, wp, lp);
         }
         let u = &mut *p;
+        if msg == 0x0020 && (w == u.info || (u.about && w == u.secondary)) {
+            SetCursor(LoadCursorW(ptr::null_mut(), 32649usize as *const u16));
+            return 1;
+        }
         if msg == 0x0200 {
             if u.hover_caption != w {
                 let previous = u.hover_caption;
@@ -886,7 +999,9 @@ unsafe extern "system" fn caption_proc(w: H, msg: u32, wp: usize, lp: isize) -> 
             u.hover_caption = ptr::null_mut();
             InvalidateRect(w, ptr::null(), 0);
         }
-        let original = if w == u.close {
+        let original = if w == u.info || (u.about && w == u.secondary) {
+            u.info_proc
+        } else if w == u.close {
             u.close_proc
         } else {
             u.minimize_proc
@@ -917,6 +1032,52 @@ unsafe extern "system" fn wndproc(w: H, msg: u32, wp: usize, lp: isize) -> isize
         }
         let u = &mut *p;
         match msg {
+            0x0111 if wp & 0xffff == 105 => {
+                if IsWindow(u.about_window) != 0 {
+                    ShowWindow(u.about_window, 5);
+                    SetForegroundWindow(u.about_window);
+                } else {
+                    u.about_window = create_about(w, u.model.clone(), u.font, u.heading, u.dpi);
+                }
+                0
+            }
+            0x0111 if u.about => {
+                if wp & 0xffff == 102 {
+                    let (url, preview) = {
+                        let m = u.model.lock().unwrap();
+                        (m.terms_url.clone(), m.preview)
+                    };
+                    if terms::valid_url(&url) {
+                        if preview {
+                            MessageBoxW(
+                                w,
+                                wide(&format!("미리보기 링크: {url}")).as_ptr(),
+                                wide("이용약관").as_ptr(),
+                                0x40,
+                            );
+                        } else if ShellExecuteW(
+                            w,
+                            wide("open").as_ptr(),
+                            wide(&url).as_ptr(),
+                            ptr::null(),
+                            ptr::null(),
+                            1,
+                        ) as isize
+                            <= 32
+                        {
+                            MessageBoxW(
+                                w,
+                                wide("이용약관 링크를 열지 못했습니다.").as_ptr(),
+                                wide("이용약관").as_ptr(),
+                                0x10,
+                            );
+                        }
+                    }
+                } else if matches!(wp & 0xffff, 101 | 202) {
+                    DestroyWindow(w);
+                }
+                0
+            }
             // Keep WS_THICKFRAME for DWM, but reject interactive size/maximize commands.
             0x0112 if matches!(wp & 0xfff0, 0xf000 | 0xf030) => 0,
             0x00a3 => 0,
@@ -931,16 +1092,19 @@ unsafe extern "system" fn wndproc(w: H, msg: u32, wp: usize, lp: isize) -> isize
                     u.checkbox,
                     u.minimize,
                     u.close,
+                    u.info,
                 ] {
-                    InvalidateRect(child, ptr::null(), 0);
+                    if !child.is_null() {
+                        InvalidateRect(child, ptr::null(), 0);
+                    }
                 }
                 0
             }
             0x0024 => {
                 let info = &mut *(lp as *mut MinMaxInfo);
                 info.min_track = Point {
-                    x: 760 * u.dpi / 96,
-                    y: 480 * u.dpi / 96,
+                    x: (if u.about { 480 } else { 760 }) * u.dpi / 96,
+                    y: (if u.about { 300 } else { 480 }) * u.dpi / 96,
                 };
                 info.max_track = Point {
                     x: info.min_track.x,
@@ -983,6 +1147,45 @@ unsafe extern "system" fn wndproc(w: H, msg: u32, wp: usize, lp: isize) -> isize
             }
             0x002b => {
                 let d = &*(lp as *const DrawItem);
+                if d.id == 105 {
+                    fill(d.dc, d.rect, u.background());
+                    let mut r = d.rect;
+                    let pad = 3 * u.dpi / 96;
+                    r.left += pad;
+                    r.right -= pad;
+                    r.top += pad;
+                    r.bottom -= pad;
+                    let color = u.color(rgb(60, 110, 180), rgb(145, 180, 255));
+                    let pen = CreatePen(0, (u.dpi / 96).max(1), color);
+                    let old_pen = SelectObject(d.dc, pen);
+                    let old_brush = SelectObject(d.dc, GetStockObject(5));
+                    RoundRect(
+                        d.dc,
+                        r.left,
+                        r.top,
+                        r.right,
+                        r.bottom,
+                        r.right - r.left,
+                        r.bottom - r.top,
+                    );
+                    SelectObject(d.dc, old_pen);
+                    SelectObject(d.dc, old_brush);
+                    DeleteObject(pen);
+                    text(d.dc, u.font, "i", d.rect, color, 0x25);
+                    if d.state & 16 != 0 {
+                        DrawFocusRect(d.dc, &d.rect);
+                    }
+                    return 1;
+                }
+                if u.about && d.id == 102 {
+                    fill(d.dc, d.rect, u.background());
+                    let color = u.color(rgb(45, 95, 200), rgb(145, 180, 255));
+                    text(d.dc, u.font, "이용약관 ↗", d.rect, color, 0x24);
+                    if d.state & 16 != 0 {
+                        DrawFocusRect(d.dc, &d.rect);
+                    }
+                    return 1;
+                }
                 if d.id == 201 || d.id == 202 {
                     let pressed = d.state & 1 != 0 || u.hover_caption == d.window;
                     fill(
@@ -1030,7 +1233,9 @@ unsafe extern "system" fn wndproc(w: H, msg: u32, wp: usize, lp: isize) -> isize
                     u.background(),
                 );
                 let m = u.model.lock().unwrap();
-                let caption = if primary {
+                let caption = if u.about {
+                    "닫기"
+                } else if primary {
                     if m.phase == 2 {
                         "완료"
                     } else if m.phase == 1 {
@@ -1134,6 +1339,10 @@ unsafe extern "system" fn wndproc(w: H, msg: u32, wp: usize, lp: isize) -> isize
                 SendMessageW(w, 0x0010, 0, 0);
                 0
             }
+            0x0010 if u.about => {
+                DestroyWindow(w);
+                0
+            }
             0x0010 => {
                 let m = u.model.lock().unwrap();
                 let phase = m.phase;
@@ -1169,11 +1378,118 @@ unsafe extern "system" fn wndproc(w: H, msg: u32, wp: usize, lp: isize) -> isize
                 0
             }
             0x0002 => {
-                PostQuitMessage(0);
+                if !u.about {
+                    PostQuitMessage(0);
+                }
                 0
+            }
+            0x0082 if u.about => {
+                let parent = data(u.owner);
+                if !parent.is_null() && (*parent).about_window == w {
+                    (*parent).about_window = ptr::null_mut();
+                }
+                attach(w, ptr::null_mut());
+                drop(Box::from_raw(p));
+                DefWindowProcW(w, msg, wp, lp)
             }
             _ => DefWindowProcW(w, msg, wp, lp),
         }
+    }
+}
+unsafe fn create_about(owner: H, model: Arc<Mutex<Model>>, font: H, heading: H, dpi: i32) -> H {
+    unsafe {
+        let instance = GetModuleHandleW(ptr::null());
+        let mut parent = Rect::default();
+        GetWindowRect(owner, &mut parent);
+        let width = 480 * dpi / 96;
+        let height = 300 * dpi / 96;
+        let title = format!("{} 정보", model.lock().unwrap().name);
+        // Owned modeless window: no disabled parent and no nested message loop.
+        let w = CreateWindowExW(
+            0,
+            wide("RocketMsiQuickEmbeddedWindow").as_ptr(),
+            wide(&title).as_ptr(),
+            0x02cc0000,
+            parent.left + (parent.right - parent.left - width) / 2,
+            parent.top + (parent.bottom - parent.top - height) / 2,
+            width,
+            height,
+            owner,
+            ptr::null_mut(),
+            instance,
+            ptr::null_mut(),
+        );
+        if w.is_null() {
+            return w;
+        }
+        let button = |id: usize, label: &str| {
+            CreateWindowExW(
+                0,
+                wide("BUTTON").as_ptr(),
+                wide(label).as_ptr(),
+                0x5001000b,
+                0,
+                0,
+                100,
+                36,
+                w,
+                id as H,
+                instance,
+                ptr::null_mut(),
+            )
+        };
+        let primary = button(101, "닫기");
+        let secondary = button(102, "이용약관");
+        let close = button(202, "닫기");
+        let has_terms = !model.lock().unwrap().terms_url.is_empty();
+        let mut state = Box::new(Window {
+            about: true,
+            owner,
+            about_window: ptr::null_mut(),
+            dark: system_dark(),
+            model,
+            cancel: Arc::new(AtomicBool::new(false)),
+            window: Arc::new(AtomicIsize::new(w as isize)),
+            sender: None,
+            primary,
+            secondary,
+            third: ptr::null_mut(),
+            checkbox: ptr::null_mut(),
+            info: ptr::null_mut(),
+            minimize: ptr::null_mut(),
+            close,
+            checkbox_proc: 0,
+            minimize_proc: 0,
+            close_proc: 0,
+            info_proc: 0,
+            hover_caption: ptr::null_mut(),
+            font,
+            heading,
+            dpi,
+            last_phase: 255,
+            last_model: None,
+        });
+        attach(w, &mut *state);
+        #[cfg(target_pointer_width = "64")]
+        {
+            state.close_proc = SetWindowLongPtrW(close, -4, caption_proc as *const () as isize);
+            state.info_proc = SetWindowLongPtrW(secondary, -4, caption_proc as *const () as isize);
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            state.close_proc = set_data(close, -4, caption_proc as *const () as isize);
+            state.info_proc = set_data(secondary, -4, caption_proc as *const () as isize);
+        }
+        ShowWindow(secondary, if has_terms { 5 } else { 0 });
+        apply_frame(w);
+        SetWindowPos(w, ptr::null_mut(), 0, 0, 0, 0, 0x0037);
+        layout(w, &mut state);
+        // The About window owns this allocation and releases it on WM_NCDESTROY.
+        let _ = Box::into_raw(state);
+        ShowWindow(w, 5);
+        SetForegroundWindow(w);
+        SetFocus(primary);
+        w
     }
 }
 fn window_thread(
@@ -1321,6 +1637,20 @@ fn window_thread(
             ptr::null_mut(),
         );
         SendMessageW(checkbox, 0x0030, font as usize, 0);
+        let info = CreateWindowExW(
+            0,
+            wide("BUTTON").as_ptr(),
+            wide("프로그램 정보").as_ptr(),
+            0x5001000b,
+            0,
+            0,
+            28,
+            28,
+            w,
+            105usize as H,
+            instance,
+            ptr::null_mut(),
+        );
         let minimize = CreateWindowExW(
             0,
             wide("BUTTON").as_ptr(),
@@ -1350,6 +1680,9 @@ fn window_thread(
             ptr::null_mut(),
         );
         let mut u = Box::new(Window {
+            about: false,
+            owner: ptr::null_mut(),
+            about_window: ptr::null_mut(),
             dark: system_dark(),
             model,
             cancel,
@@ -1359,11 +1692,13 @@ fn window_thread(
             secondary,
             third,
             checkbox,
+            info,
             minimize,
             close,
             checkbox_proc: 0,
             minimize_proc: 0,
             close_proc: 0,
+            info_proc: 0,
             hover_caption: ptr::null_mut(),
             font,
             heading,
@@ -1377,12 +1712,14 @@ fn window_thread(
             u.checkbox_proc = SetWindowLongPtrW(checkbox, -4, checkbox_proc as *const () as isize);
             u.minimize_proc = SetWindowLongPtrW(minimize, -4, caption_proc as *const () as isize);
             u.close_proc = SetWindowLongPtrW(close, -4, caption_proc as *const () as isize);
+            u.info_proc = SetWindowLongPtrW(info, -4, caption_proc as *const () as isize);
         }
         #[cfg(target_pointer_width = "32")]
         {
             u.checkbox_proc = set_data(checkbox, -4, checkbox_proc as *const () as isize);
             u.minimize_proc = set_data(minimize, -4, caption_proc as *const () as isize);
             u.close_proc = set_data(close, -4, caption_proc as *const () as isize);
+            u.info_proc = set_data(info, -4, caption_proc as *const () as isize);
         }
         apply_frame(w);
         SetWindowPos(w, ptr::null_mut(), 0, 0, 0, 0, 0x0037);
@@ -1392,19 +1729,34 @@ fn window_thread(
         SetTimer(w, 1, 200, ptr::null_mut());
         ShowWindow(w, 5);
         SetFocus(primary);
+        let preview_about = u.model.lock().unwrap().preview_about;
+        if preview_about {
+            u.about_window = create_about(w, u.model.clone(), font, heading, dpi);
+        }
         let mut msg: Msg = std::mem::zeroed();
         while GetMessageW(&mut msg, ptr::null_mut(), 0, 0) > 0 {
+            let root = GetAncestor(msg.hwnd, 2);
+            let active = if data(root).is_null() { w } else { root };
             if msg.msg == 0x0100 && msg.wp == 27 {
-                SendMessageW(w, 0x0010, 0, 0);
+                SendMessageW(active, 0x0010, 0, 0);
                 continue;
             }
             if msg.msg == 0x0100 && msg.wp == 13 {
                 let focus = GetFocus();
+                let current = &*data(active);
                 SendMessageW(
-                    if [secondary, third, close, minimize].contains(&focus) {
+                    if [
+                        current.secondary,
+                        current.third,
+                        current.close,
+                        current.minimize,
+                        current.info,
+                    ]
+                    .contains(&focus)
+                    {
                         focus
                     } else {
-                        primary
+                        current.primary
                     },
                     0x00f5,
                     0,
@@ -1412,7 +1764,7 @@ fn window_thread(
                 );
                 continue;
             }
-            if IsDialogMessageW(w, &mut msg) == 0 {
+            if IsDialogMessageW(active, &mut msg) == 0 {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
@@ -1487,6 +1839,14 @@ pub unsafe extern "system" fn InitializeEmbeddedUI(
             publisher: property(h, "Manufacturer"),
             version: property(h, "ProductVersion"),
             branding: property(h, "BrandingText"),
+            terms_url: {
+                let value = property(h, "EMB_QUICK_TERMS_URL");
+                if terms::valid_url(&value) {
+                    value
+                } else {
+                    String::new()
+                }
+            },
             installed,
             action: Choice::Install,
             phase: 0,
@@ -1498,6 +1858,7 @@ pub unsafe extern "system" fn InitializeEmbeddedUI(
             step: 0,
             action_data: false,
             preview: false,
+            preview_about: false,
             launch,
             launch_checked: false,
             auto_attempted: false,
@@ -1635,11 +1996,12 @@ pub unsafe extern "system" fn QuickMsiPreview(_w: H, _instance: H, args: *const 
         publisher: "Rocket MSI".into(),
         version: "1.0.0".into(),
         branding: "Rocket MSI".into(),
+        terms_url: "https://example.com/terms".into(),
         installed: mode == "maintenance",
         action: Choice::Install,
         phase: if mode == "complete" {
             2
-        } else if mode == "progress" {
+        } else if mode == "progress" || mode == "progress-about" {
             1
         } else {
             0
@@ -1652,6 +2014,7 @@ pub unsafe extern "system" fn QuickMsiPreview(_w: H, _instance: H, args: *const 
         step: 0,
         action_data: false,
         preview: true,
+        preview_about: mode == "progress-about",
         launch: if mode == "maintenance" {
             None
         } else {
@@ -1665,5 +2028,31 @@ pub unsafe extern "system" fn QuickMsiPreview(_w: H, _instance: H, args: *const 
         auto_attempted: false,
     };
     let (s, _rx) = start(model);
+    let stop = Arc::new(AtomicBool::new(false));
+    let progress = if mode == "progress" || mode == "progress-about" {
+        let model = s.model.clone();
+        let stop = stop.clone();
+        Some(thread::spawn(move || {
+            for tick in 46..=100 {
+                thread::sleep(std::time::Duration::from_millis(200));
+                if stop.load(Ordering::SeqCst) {
+                    return;
+                }
+                let mut m = model.lock().unwrap();
+                m.ticks = tick;
+                m.status = format!("설치 진행 미리보기: {tick}% (실제 설치하지 않습니다.)");
+            }
+            let mut m = model.lock().unwrap();
+            m.phase = 2;
+            m.result = Some(0);
+            m.status = String::new();
+        }))
+    } else {
+        None
+    };
     let _ = s.thread.join();
+    stop.store(true, Ordering::SeqCst);
+    if let Some(progress) = progress {
+        let _ = progress.join();
+    }
 }

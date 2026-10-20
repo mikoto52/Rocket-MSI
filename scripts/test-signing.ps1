@@ -7,9 +7,9 @@ $work=Join-Path $root ('target/signing-test-'+[Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($work)|Out-Null
 $cert=$null;$imported=$null;$rsa=$null
 try {
-    $sdk=Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
-    $tool=Get-ChildItem "$sdk/*/x64/signtool.exe" | Sort-Object FullName -Descending | Select-Object -First 1
-    if(-not $tool){throw 'Windows SDK SignTool required'}
+    & cargo build --manifest-path (Join-Path $root 'Cargo.toml') --release --offline --bin emb-msi --example signing-probe
+    if($LASTEXITCODE -ne 0){throw 'Native signing probe build failed'}
+    $probe=Join-Path $root 'target/release/examples/signing-probe.exe'
     $cli=Join-Path $root 'target/release/emb-msi.exe'
     $rsa=[Security.Cryptography.RSA]::Create(2048)
     $req=[Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=Rocket MSI Disposable Signing Test',$rsa,[Security.Cryptography.HashAlgorithmName]::SHA256,[Security.Cryptography.RSASignaturePadding]::Pkcs1)
@@ -25,24 +25,10 @@ try {
         $msi=Join-Path $work "$mode/Setup.msi"
         & $cli build $source $msi
         if($LASTEXITCODE -ne 0){throw 'Fixture MSI build failed'}
-        $timestampArgs=@()
-        if($TimestampUrl){$timestampArgs=@('/tr',$TimestampUrl,'/td','SHA256')}
-        if($mode -eq 'pfx') {
-            & $tool.FullName sign /fd SHA256 /f $pfx /p $password @timestampArgs $msi | Out-Null
-        } else {
+        if($mode -eq 'store') {
             $secure=ConvertTo-SecureString $password -AsPlainText -Force
             $imported=Import-PfxCertificate -FilePath $pfx -Password $secure -CertStoreLocation Cert:/CurrentUser/My
-            & $tool.FullName sign /fd SHA256 /s My /sha1 $imported.Thumbprint @timestampArgs $msi | Out-Null
         }
-        if($LASTEXITCODE -ne 0){throw "$mode signing failed"}
-        $signature=Get-AuthenticodeSignature -LiteralPath $msi
-        if($signature.SignerCertificate.Thumbprint -ne $cert.Thumbprint){throw "$mode signer mismatch"}
-        if($TimestampUrl -and -not $signature.TimeStamperCertificate){throw 'Timestamp missing'}
-        if($signature.Status -notin @('NotTrusted','UnknownError')){throw "Expected untrusted test chain, got $($signature.Status)"}
-        $ErrorActionPreference='Continue'
-        & $cli verify-signature $msi 2>$null
-        $ErrorActionPreference='Stop'
-        if($LASTEXITCODE -eq 0){throw 'Untrusted certificate was incorrectly accepted'}
         $project=Join-Path $work "$mode.embproj"
         & $cli init $project | Out-Null
         if($LASTEXITCODE -ne 0){throw 'Fixture project creation failed'}
@@ -60,11 +46,24 @@ try {
         try {
             $env:ROCKET_MSI_PFX_PASSWORD=$password
             $ErrorActionPreference='Continue'
+            $probeResult=(& $probe $project $msi 2>&1 | Out-String)
+            $ErrorActionPreference='Stop'
+            if($LASTEXITCODE -eq 0 -or $probeResult -notmatch 'MSI signature verification failed'){throw "$mode native signing failed: $probeResult"}
+            $signature=Get-AuthenticodeSignature -LiteralPath $msi
+            if($signature.SignerCertificate.Thumbprint -ne $cert.Thumbprint){throw "$mode signer mismatch"}
+            if($TimestampUrl -and -not $signature.TimeStamperCertificate){throw 'Timestamp missing'}
+            if($signature.Status -notin @('NotTrusted','UnknownError')){throw "Expected untrusted test chain, got $($signature.Status)"}
+            $ErrorActionPreference='Continue'
+            & $cli verify-signature $msi 2>$null
+            $ErrorActionPreference='Stop'
+            if($LASTEXITCODE -eq 0){throw 'Untrusted certificate was incorrectly accepted'}
+            $ErrorActionPreference='Continue'
             $buildResult=(& $cli build $project 2>&1 | Out-String)
             $ErrorActionPreference='Stop'
             if($LASTEXITCODE -eq 0 -or $buildResult -notmatch 'MSI signature verification failed'){throw "$mode project signing did not reach trust verification"}
             if(Test-Path (Join-Path $work "$mode-signed/Setup.msi")){throw 'Unverified MSI was published'}
             if($mode -eq 'pfx') {
+                if(Get-ChildItem Cert:/CurrentUser/My | Where-Object Thumbprint -EQ $cert.Thumbprint){throw 'PFX signing persisted its certificate'}
                 $env:ROCKET_MSI_PFX_PASSWORD='wrong disposable password'
                 $ErrorActionPreference='Continue'
                 $badResult=(& $cli build $project 2>&1 | Out-String)

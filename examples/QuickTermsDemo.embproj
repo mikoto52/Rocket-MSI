@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExpressMsiBuilderProject schemaVersion="1">
+  <Product name="Rocket MSI Terms Demo" manufacturer="Rocket MSI" version="1.0.0" productCode="{342778C8-B447-4520-91EB-3FA203C07431}" upgradeCode="{342778C8-B447-4520-91EB-3FA203C07432}" architecture="x64" scope="perMachine" />
+  <Files><File source="payload/hello.txt" target="{InstallDestination}\hello.txt" /></Files>
+  <Installation directory="{ProgramFiles}\Rocket MSI\Terms Demo" allowDirectoryChange="false" existingFiles="default" />
+  <Upgrade enabled="true" />
+  <UI mode="quick">
+    <BrandingText>Rocket MSI</BrandingText>
+    <Terms url="https://example.com/terms" />
+  </UI>
+  <Build outputDirectory="../dist/quick-terms-demo/package" outputFile="Setup.msi"><Cabinet storage="embedded" split="none" /></Build>
+</ExpressMsiBuilderProject>

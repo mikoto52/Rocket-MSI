@@ -22,6 +22,7 @@ init은 새 ProductCode·UpgradeCode를 파일에 저장한다. 기본 소스는
 | Upgrade (선택) | enabled=true/false. [현재 제한과 시험](upgrade-test.md). 새 프로젝트는 true, 요소 생략 시 false |
 | UI (선택) | mode=wizard/quick, 생략 시 wizard. License, BrandingText, FinishLaunch. Quick은 첫 단위로 License 미지원 |
 | UI/License | file: UTF-8 TXT 또는 RTF |
+| UI/Terms (선택) | url: HTTP(S) 약관 URL. Quick MSI 첫 화면 동의 안내와 비모달 About 창 링크에 사용 |
 | UI/BrandingText | 한 줄 텍스트. 기본 Rocket MSI. 전체 마법사 문구와 하단에 사용; 이전 기본값은 자동 변환 |
 | UI/FinishLaunch | file: 소스 내부 상대 EXE 경로 |
 | Build/Signing (선택) | enabled, source=pfx/store, pfxFile, thumbprint, storeLocation=currentUser/localMachine, timestampUrl. 암호는 저장하지 않음. [서명 안내](signing.md) |

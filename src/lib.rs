@@ -28,4 +28,6 @@ pub mod shortcut;
 #[cfg(windows)]
 pub mod signing;
 #[cfg(windows)]
+pub mod terms;
+#[cfg(windows)]
 pub mod upgrade;

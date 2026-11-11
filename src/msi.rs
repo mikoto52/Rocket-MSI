@@ -488,6 +488,28 @@ impl Database {
             "insert embedded UI",
         )
     }
+    pub fn embedded_ui_resource(&self, name: &str, filename: &str, path: &Path) -> Result<()> {
+        let view = self.view("INSERT INTO `MsiEmbeddedUI` (`MsiEmbeddedUI`,`FileName`,`Attributes`,`Data`) VALUES (?,?,?,?)")?;
+        let record = Owned(unsafe { MsiCreateRecord(4) });
+        for (field, value) in [(1, name), (2, filename)] {
+            check(
+                unsafe { MsiRecordSetStringW(record.0, field, wide(value).as_ptr()) },
+                "UI resource name",
+            )?;
+        }
+        check(
+            unsafe { MsiRecordSetInteger(record.0, 3, 0) },
+            "UI resource attributes",
+        )?;
+        check(
+            unsafe { MsiRecordSetStreamW(record.0, 4, path_wide(path).as_ptr()) },
+            "UI resource data",
+        )?;
+        check(
+            unsafe { MsiViewExecute(view.0, record.0) },
+            "insert UI resource",
+        )
+    }
     fn insert_stream(&self, table: &str, name: &str, path: &Path) -> Result<()> {
         let view = self.view(&format!(
             "INSERT INTO `{table}` (`Name`,`Data`) VALUES (?,?)"

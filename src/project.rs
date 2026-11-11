@@ -22,6 +22,7 @@ pub struct Project {
     pub branding: String,
     pub quick_msi: bool,
     pub terms_url: Option<String>,
+    pub quick_icon: Option<String>,
     pub storage: CabStorage,
     pub cab_limit: Option<u64>,
     pub launch: Option<Launch>,
@@ -65,6 +66,63 @@ mod tests {
             Project::parse(&String::from_utf8(p.xml()?)?)?.signing,
             p.signing
         );
+        Ok(())
+    }
+    #[test]
+    fn quick_icon_roundtrips_embeds_resources_and_rejects_invalid_files() -> Result<()> {
+        let root = std::env::current_dir()?
+            .join("target")
+            .join(format!("quick-icon-{}", msi::guid()?));
+        fs::create_dir_all(&root)?;
+        let t = Temp(root);
+        fs::write(t.0.join("payload.txt"), b"not installed")?;
+        fs::write(
+            t.0.join("제품 아이콘.ico"),
+            include_bytes!("../assets/installer/app-icon.ico"),
+        )?;
+        for arch in ["x86", "x64", "arm64"] {
+            let mut p = Project::new()?;
+            p.product.architecture = arch.into();
+            p.quick_msi = true;
+            p.quick_icon = Some("제품 아이콘.ico".into());
+            p.files = Some(vec![(
+                "payload.txt".into(),
+                "{InstallDestination}\\payload.txt".into(),
+            )]);
+            p.output_directory = format!("out-{arch}");
+            let path = t.0.join(format!("{arch}.embproj"));
+            p.save_new(&path)?;
+            let q = Project::load(&path)?;
+            assert_eq!(p.quick_icon, q.quick_icon);
+            let output = q.build(&path)?;
+            let db = msi::Database::read(&output)?;
+            assert_eq!(db.query("SELECT `FileName`,`Attributes` FROM `MsiEmbeddedUI` WHERE `MsiEmbeddedUI` = 'QuickIcon'", 2)?, vec![vec!["quickicon.ico", "0"]]);
+            assert_eq!(
+                db.query("SELECT `FileName` FROM `MsiEmbeddedUI`", 1)?.len(),
+                2
+            );
+        }
+        let mut p = Project::new()?;
+        p.quick_msi = true;
+        p.files = Some(vec![(
+            "payload.txt".into(),
+            "{InstallDestination}\\payload.txt".into(),
+        )]);
+        let path = t.0.join("invalid.embproj");
+        for file in ["missing.ico", "corrupt.ico"] {
+            fs::write(t.0.join("corrupt.ico"), b"not a Windows icon")?;
+            p.quick_icon = Some(file.into());
+            p.save_new(&path)?;
+            assert!(p.build(&path).is_err());
+            assert!(!t.0.join(&p.output_directory).join(&p.output_file).exists());
+            fs::remove_file(&path)?;
+        }
+        for file in ["", "   ", "picture.png", "bad\0.ico"] {
+            p.quick_icon = Some(file.into());
+            assert!(p.validate().is_err());
+        }
+        p.quick_icon = None;
+        assert!(p.validate().is_ok());
         Ok(())
     }
     #[test]
@@ -1146,6 +1204,7 @@ impl Project {
             branding: "Rocket MSI".into(),
             quick_msi: false,
             terms_url: None,
+            quick_icon: None,
             storage: CabStorage::Embedded,
             cab_limit: None,
             launch: None,
@@ -1256,6 +1315,7 @@ impl Project {
             branding: "Rocket MSI".into(),
             quick_msi: false,
             terms_url: None,
+            quick_icon: None,
             storage: CabStorage::Embedded,
             cab_limit: None,
             launch: None,
@@ -1339,7 +1399,7 @@ impl Project {
         if let Some(ui) = root.optional("UI")? {
             ui.check(
                 &["mode"],
-                &["License", "BrandingText", "FinishLaunch", "Terms"],
+                &["License", "BrandingText", "FinishLaunch", "Terms", "Icon"],
                 false,
             )?;
             result.quick_msi = match ui.attrs.get("mode").map(String::as_str).unwrap_or("wizard") {
@@ -1357,6 +1417,10 @@ impl Project {
             if let Some(n) = ui.optional("License")? {
                 n.check(&["file"], &[], false)?;
                 result.license = Some(n.attr("file")?.into());
+            }
+            if let Some(n) = ui.optional("Icon")? {
+                n.check(&["file"], &[], false)?;
+                result.quick_icon = Some(n.attr("file")?.into());
             }
             if let Some(n) = ui.optional("BrandingText")? {
                 n.check(&[], &[], true)?;
@@ -1560,6 +1624,15 @@ impl Project {
     }
     pub fn validate(&self) -> Result<()> {
         self.product.validate()?;
+        if let Some(icon) = &self.quick_icon
+            && (icon.trim().is_empty()
+                || icon.contains('\0')
+                || !Path::new(icon)
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("ico")))
+        {
+            return Err("UI.Icon.file must be a non-empty .ico path".into());
+        }
         if self
             .terms_url
             .as_deref()
@@ -1623,6 +1696,7 @@ impl Project {
         }
         let output = base.join(&self.output_directory).join(&self.output_file);
         let license = self.license.as_ref().map(|p| base.join(p));
+        let quick_icon = self.quick_icon.as_ref().map(|p| base.join(p));
         let selected = self
             .files
             .as_ref()
@@ -1640,6 +1714,7 @@ impl Project {
                 product: Some(&self.product),
                 quick_msi: self.quick_msi,
                 terms_url: self.terms_url.as_deref(),
+                quick_icon: quick_icon.as_deref(),
             },
             selected,
             self.signing.as_ref().map(|config| (config, base, password)),
@@ -1815,6 +1890,10 @@ impl Project {
             }
             if let Some(url) = &self.terms_url {
                 w.write(E::start_element("Terms").attr("url", url))?;
+                w.write(E::end_element())?;
+            }
+            if let Some(file) = &self.quick_icon {
+                w.write(E::start_element("Icon").attr("file", file))?;
                 w.write(E::end_element())?;
             }
             w.write(E::start_element("BrandingText"))?;

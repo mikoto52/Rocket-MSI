@@ -10,6 +10,7 @@
 <UI mode="quick">
   <BrandingText>Rocket MSI</BrandingText>
   <Terms url="https://example.com/terms" />
+  <Icon file="assets/product.ico" />
   <FinishLaunch file="DemoLaunch.exe">
     <Arguments>
       <Argument>first argument</Argument>
@@ -30,6 +31,8 @@ URL은 프로젝트 검증과 UI 실행 시 HTTP(S) 형식인지 확인하며 �
 설치 없는 미리보기의 `progress` 모드는 진행률을 움직인 뒤 완료 화면으로 바뀐다. `progress-about` 모드는 About을 처음부터 열고 같은 동작을 수행해 창이 비모달임을 확인한다. 미리보기의 약관 링크는 브라우저를 열지 않고 URL을 안내하는 창만 표시한다.
 
 ## 화면과 동작
+
+0.3.2부터 빌더의 **설치 화면 → 프로그램 아이콘 (Quick MSI, 선택)**에서 ICO 파일을 지정할 수 있다. `UI/Icon.file`로 저장하며 상대 경로는 프로젝트 파일 기준이다. 최대 10 MiB의 유효한 ICO만 허용하고 누락·손상 파일은 빌드 오류로 처리한다. 여러 해상도가 포함된 정사각형 ICO를 권장한다. 선택한 아이콘은 `MsiEmbeddedUI` 리소스로 MSI에 포함되어 배포 시 원본 파일이 필요하지 않으며, 설치·진행·복구·제거·완료 화면 오른쪽과 창 아이콘에 공통 적용한다. 생략하면 기존 큐브를 표시한다. 마법사 모드로 전환하면 이 설정은 보존하되 사용하지 않는다. [아이콘 예제](../examples/QuickIconDemo.embproj)를 참고한다.
 
 - 준비: `{ProductName} 설치`, `Publisher: {Manufacturer}`, `Version: {ProductVersion}`, 오른쪽 큐브 아이콘과 설치 버튼. 신규 설치 첫 화면에는 취소 버튼을 표시하지 않으며 창 닫기·Esc로 취소할 수 있다.
 - 설치 후 실행이 지정되면 왼쪽 아래에 체크박스를 표시한다. 기본값은 해제이며 설치 시작 전에 선택한다.

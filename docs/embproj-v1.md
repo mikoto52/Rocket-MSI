@@ -23,6 +23,7 @@ init은 새 ProductCode·UpgradeCode를 파일에 저장한다. 기본 소스는
 | UI (선택) | mode=wizard/quick, 생략 시 wizard. License, BrandingText, FinishLaunch. Quick은 첫 단위로 License 미지원 |
 | UI/License | file: UTF-8 TXT 또는 RTF |
 | UI/Terms (선택) | url: HTTP(S) 약관 URL. Quick MSI 첫 화면 동의 안내와 비모달 About 창 링크에 사용 |
+| UI/Icon (선택, 0.3.2) | file: Quick MSI용 ICO 파일(최대 10 MiB). 상대 경로는 프로젝트 기준. MSI에 내장하며 생략하면 기본 큐브 표시. 마법사 모드에서는 설정을 보존하되 사용하지 않음 |
 | UI/BrandingText | 한 줄 텍스트. 기본 Rocket MSI. 전체 마법사 문구와 하단에 사용; 이전 기본값은 자동 변환 |
 | UI/FinishLaunch | file: 소스 내부 상대 EXE 경로 |
 | Build/Signing (선택) | enabled, source=pfx/store, pfxFile, thumbprint, storeLocation=currentUser/localMachine, timestampUrl. 암호는 저장하지 않음. [서명 안내](signing.md) |

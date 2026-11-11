@@ -10,6 +10,8 @@ pub mod config;
 #[cfg(windows)]
 pub mod finish;
 #[cfg(windows)]
+pub mod icon;
+#[cfg(windows)]
 pub mod license;
 #[cfg(windows)]
 pub mod msi;

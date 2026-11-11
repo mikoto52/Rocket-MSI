@@ -69,6 +69,7 @@ pub fn build_with_finish(
         product: None,
         quick_msi: false,
         terms_url: None,
+        quick_icon: None,
     })
 }
 pub struct BuildSpec<'a> {
@@ -82,6 +83,7 @@ pub struct BuildSpec<'a> {
     pub product: Option<&'a crate::config::Product>,
     pub quick_msi: bool,
     pub terms_url: Option<&'a str>,
+    pub quick_icon: Option<&'a Path>,
 }
 pub fn build_configured(spec: &BuildSpec<'_>) -> Result<()> {
     build_selected(spec, None)
@@ -119,6 +121,11 @@ pub fn build_selected_signed(
         return Err("Quick MSI terms must be an HTTP(S) URL".into());
     }
     product.validate()?;
+    if spec.quick_msi
+        && let Some(icon) = spec.quick_icon
+    {
+        crate::icon::validate(icon)?;
+    }
     if cab_limit == Some(0) {
         return Err("CAB size must be positive".into());
     }
@@ -214,6 +221,9 @@ pub fn build_selected_signed(
         let dll = work.0.join("embquick.dll");
         fs::write(&dll, bytes)?;
         db.embedded_ui(&dll)?;
+        if let Some(icon) = spec.quick_icon {
+            db.embedded_ui_resource("QuickIcon", "quickicon.ico", icon)?;
+        }
     }
     for (key, value) in [
         ("ProductCode", product.product_code.as_str()),

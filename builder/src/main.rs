@@ -103,6 +103,7 @@ async fn pick_path(kind: String) -> Result<Option<String>, String> {
             "folder" => dialog.pick_folder(),
             "license" => dialog.add_filter("이용약관", &["txt", "rtf"]).pick_file(),
             "exe" => dialog.add_filter("실행 파일", &["exe"]).pick_file(),
+            "icon" => dialog.add_filter("프로그램 아이콘", &["ico"]).pick_file(),
             "pfx" => dialog
                 .add_filter("서명 인증서", &["pfx", "p12"])
                 .pick_file(),

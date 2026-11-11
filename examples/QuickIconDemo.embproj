@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExpressMsiBuilderProject schemaVersion="1">
+  <Product name="Rocket MSI Icon Demo" manufacturer="Rocket MSI" version="1.0.0" productCode="{8A327ADE-0115-4B80-AC25-2CA03EB0A319}" upgradeCode="{34D550A8-AF46-4DB7-8E8E-4A99519196B8}" architecture="x64" scope="perMachine" />
+  <Files><File source="payload/hello.txt" target="{InstallDestination}\hello.txt" /></Files>
+  <Installation directory="{ProgramFiles}\Rocket MSI\Icon Demo" allowDirectoryChange="false" existingFiles="default" />
+  <Upgrade enabled="true" />
+  <UI mode="quick">
+    <BrandingText>Rocket MSI</BrandingText>
+    <Icon file="../assets/installer/app-icon.ico" />
+    <Terms url="https://example.com/terms" />
+  </UI>
+  <Build outputDirectory="../dist/quick-icon-demo/package" outputFile="Setup.msi"><Cabinet storage="embedded" split="none" /></Build>
+</ExpressMsiBuilderProject>

@@ -169,6 +169,19 @@ unsafe extern "system" {
     fn DrawFocusRect(dc: H, rect: *const Rect) -> i32;
     fn InvalidateRect(w: H, rect: *const Rect, erase: i32) -> i32;
     fn LoadCursorW(instance: H, name: *const u16) -> H;
+    fn LoadImageW(instance: H, name: *const u16, kind: u32, cx: i32, cy: i32, flags: u32) -> H;
+    fn DrawIconEx(
+        dc: H,
+        x: i32,
+        y: i32,
+        icon: H,
+        cx: i32,
+        cy: i32,
+        step: u32,
+        brush: H,
+        flags: u32,
+    ) -> i32;
+    fn DestroyIcon(icon: H) -> i32;
     fn MessageBoxW(w: H, text: *const u16, title: *const u16, flags: u32) -> i32;
     #[cfg(target_pointer_width = "64")]
     fn GetWindowLongPtrW(w: H, index: i32) -> isize;
@@ -387,6 +400,7 @@ struct Model {
     version: String,
     branding: String,
     terms_url: String,
+    icon_path: Option<std::path::PathBuf>,
     installed: bool,
     action: Choice,
     phase: u8,
@@ -411,6 +425,7 @@ struct Session {
 }
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 struct Window {
+    icon: H,
     about: bool,
     owner: H,
     about_window: H,
@@ -828,48 +843,62 @@ unsafe fn paint(w: H, u: &Window) {
         let x = r.right - s(130);
         let y = s(86);
         let z = s(44);
-        for (points, color) in [
-            (
-                [
-                    Point { x, y: y - z / 2 },
-                    Point { x: x + z, y },
-                    Point { x, y: y + z / 2 },
-                    Point { x: x - z, y },
-                ],
-                rgb(90, 223, 202),
-            ),
-            (
-                [
-                    Point { x: x - z, y },
-                    Point { x, y: y + z / 2 },
-                    Point {
-                        x,
-                        y: y + z * 3 / 2,
-                    },
-                    Point { x: x - z, y: y + z },
-                ],
-                rgb(41, 115, 155),
-            ),
-            (
-                [
-                    Point { x, y: y + z / 2 },
-                    Point { x: x + z, y },
-                    Point { x: x + z, y: y + z },
-                    Point {
-                        x,
-                        y: y + z * 3 / 2,
-                    },
-                ],
-                rgb(25, 77, 119),
-            ),
-        ] {
-            let brush = CreateSolidBrush(color);
-            let old = SelectObject(dc, brush);
-            let pen = SelectObject(dc, GetStockObject(8));
-            Polygon(dc, points.as_ptr(), 4);
-            SelectObject(dc, pen);
-            SelectObject(dc, old);
-            DeleteObject(brush);
+        if !u.icon.is_null() {
+            DrawIconEx(
+                dc,
+                x - z,
+                y - z / 2,
+                u.icon,
+                z * 2,
+                z * 2,
+                0,
+                ptr::null_mut(),
+                3,
+            );
+        } else {
+            for (points, color) in [
+                (
+                    [
+                        Point { x, y: y - z / 2 },
+                        Point { x: x + z, y },
+                        Point { x, y: y + z / 2 },
+                        Point { x: x - z, y },
+                    ],
+                    rgb(90, 223, 202),
+                ),
+                (
+                    [
+                        Point { x: x - z, y },
+                        Point { x, y: y + z / 2 },
+                        Point {
+                            x,
+                            y: y + z * 3 / 2,
+                        },
+                        Point { x: x - z, y: y + z },
+                    ],
+                    rgb(41, 115, 155),
+                ),
+                (
+                    [
+                        Point { x, y: y + z / 2 },
+                        Point { x: x + z, y },
+                        Point { x: x + z, y: y + z },
+                        Point {
+                            x,
+                            y: y + z * 3 / 2,
+                        },
+                    ],
+                    rgb(25, 77, 119),
+                ),
+            ] {
+                let brush = CreateSolidBrush(color);
+                let old = SelectObject(dc, brush);
+                let pen = SelectObject(dc, GetStockObject(8));
+                Polygon(dc, points.as_ptr(), 4);
+                SelectObject(dc, pen);
+                SelectObject(dc, old);
+                DeleteObject(brush);
+            }
         }
         text(
             dc,
@@ -1443,6 +1472,7 @@ unsafe fn create_about(owner: H, model: Arc<Mutex<Model>>, font: H, heading: H, 
         let close = button(202, "닫기");
         let has_terms = !model.lock().unwrap().terms_url.is_empty();
         let mut state = Box::new(Window {
+            icon: ptr::null_mut(), // Main window owns the icon handle.
             about: true,
             owner,
             about_window: ptr::null_mut(),
@@ -1536,6 +1566,27 @@ fn window_thread(
             return;
         }
         let dpi = GetDpiForWindow(w).max(96) as i32;
+        let icon = model
+            .lock()
+            .unwrap()
+            .icon_path
+            .as_ref()
+            .map_or(ptr::null_mut(), |path| {
+                use std::os::windows::ffi::OsStrExt;
+                let name: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+                LoadImageW(
+                    ptr::null_mut(),
+                    name.as_ptr(),
+                    1,
+                    88 * dpi / 96,
+                    88 * dpi / 96,
+                    0x10,
+                )
+            });
+        if !icon.is_null() {
+            SendMessageW(w, 0x0080, 0, icon as isize);
+            SendMessageW(w, 0x0080, 1, icon as isize);
+        }
         let mut outer = Rect::default();
         GetWindowRect(w, &mut outer);
         let width = 760 * dpi / 96;
@@ -1680,6 +1731,7 @@ fn window_thread(
             ptr::null_mut(),
         );
         let mut u = Box::new(Window {
+            icon,
             about: false,
             owner: ptr::null_mut(),
             about_window: ptr::null_mut(),
@@ -1772,6 +1824,9 @@ fn window_thread(
         u.window.store(0, Ordering::SeqCst);
         DeleteObject(font);
         DeleteObject(heading);
+        if !icon.is_null() {
+            DestroyIcon(icon);
+        }
         UnregisterClassW(name.as_ptr(), instance);
     }
 }
@@ -1795,7 +1850,7 @@ fn start(model: Model) -> (Session, mpsc::Receiver<Choice>) {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InitializeEmbeddedUI(
     h: u32,
-    _resources: *const u16,
+    resources: *const u16,
     level: *mut u32,
 ) -> u32 {
     unsafe {
@@ -1835,6 +1890,19 @@ pub unsafe extern "system" fn InitializeEmbeddedUI(
             None
         };
         let model = Model {
+            icon_path: if resources.is_null() {
+                None
+            } else {
+                use std::os::windows::ffi::OsStringExt;
+                let mut len = 0;
+                while *resources.add(len) != 0 {
+                    len += 1;
+                }
+                let directory =
+                    std::ffi::OsString::from_wide(std::slice::from_raw_parts(resources, len));
+                let path = std::path::PathBuf::from(directory).join("quickicon.ico");
+                path.is_file().then_some(path)
+            },
             name,
             publisher: property(h, "Manufacturer"),
             version: property(h, "ProductVersion"),
@@ -1992,6 +2060,7 @@ pub unsafe extern "system" fn QuickMsiPreview(_w: H, _instance: H, args: *const 
         }
     };
     let model = Model {
+        icon_path: None,
         name: "Rocket MSI Demo".into(),
         publisher: "Rocket MSI".into(),
         version: "1.0.0".into(),

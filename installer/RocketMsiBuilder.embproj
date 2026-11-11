@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ExpressMsiBuilderProject schemaVersion="1">
-  <Product name="Rocket MSI Builder" manufacturer="TeamAST" version="0.3.1" productCode="{8BC9C079-169E-450E-AC41-BC2E21808DB8}" upgradeCode="{A201524D-7745-47A6-A9D6-D6BEC7C7823A}" architecture="x64" scope="perMachine" />
+  <Product name="Rocket MSI Builder" manufacturer="TeamAST" version="0.3.2" productCode="{DF8DA9E4-AD28-472C-9B89-D068A742434B}" upgradeCode="{A201524D-7745-47A6-A9D6-D6BEC7C7823A}" architecture="x64" scope="perMachine" />
   <Files>
     <File source="..\dist\builder\dependencies.json" target="{InstallDestination}\dependencies.json" />
     <File source="..\dist\builder\RocketMsiBuilder.exe" target="{InstallDestination}\RocketMsiBuilder.exe" />
